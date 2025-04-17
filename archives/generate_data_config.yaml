@@ -1,0 +1,46 @@
+device: "cuda:0"  # Change to "cpu" if GPU is not available.
+batch_size: 1024
+
+fractions:
+  easy: 0.9
+  medium: 0.075
+
+curriculum:
+  # Maximum total training samples used to scale the training sample ratios output by the RL agent.
+  train_samples_max: 240000  
+  # The valid learning rate range (minimum and maximum) for mapping RL outputs.
+  learning_rate_range: [0.001, 0.1]
+  max_phases: 3   # The number of curriculum phases used during training.
+  # Optional: offset for learning rate mapping
+  lr_offset: 0.0001
+  # Optional: minimum samples to use in a phase
+  min_sample_usage: 100
+
+rl:
+  actor_lr: 1e-4
+  critic_lr: 1e-3
+  gamma: 0.99
+  tau: 0.005
+  buffer_size: 1000000
+  batch_size: 124
+  exploration_noise: 0.1
+  macro_actions:
+    # A baseline macro action with neutral values.
+    all_even: [0.0, 0.0, 0.0, 0.0, 0.0]
+    # Prioritize training on easy data.
+    easy_first: [0.0, 2.0, 0.0, 0.0, 0.0]
+    # Prioritize training on medium data.
+    medium_first: [0.0, 0.0, 2.0, 0.0, 0.0]
+    # Prioritize training on hard data.
+    hard_first: [0.0, 0.0, 0.0, 2.0, 0.0]
+    # An aggressive macro: higher learning rate and uses a large sample proportion.
+    aggressive: [1.0, 0.0, 0.0, 0.0, 1.0]
+    # A conservative macro: lower learning rate and conserves sample usage.
+    conservative: [-1.0, 0.0, 0.0, 0.0, -1.0]
+
+observation:
+  num_bins: 64  # Number of bins to compute each loss histogram.
+
+paths:
+  save_path: "results/curriculum_rl"
+  data_path: "./data"
