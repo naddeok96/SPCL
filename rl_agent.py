@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
+import torch.nn.utils as utils
 
 # Define the Actor network.
 class Actor(nn.Module):
@@ -116,6 +117,7 @@ class DDPGAgent:
         self.tau = config["rl"]["tau"]
         self.exploration_noise = config["rl"]["exploration_noise"]
         self.ou_noise = OUNoise(action_dim)
+        self.config = config
         
     def _hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -153,7 +155,6 @@ class DDPGAgent:
 
         return action
 
-    
     def _softmax_over_head(self, x):
         exp_x = np.exp(x - np.max(x))
         return exp_x / exp_x.sum()
@@ -166,7 +167,13 @@ class DDPGAgent:
             replay_buffer (ReplayBuffer): The replay buffer instance.
             batch_size (int): The size of the batch to sample.
         """
-        state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+        if self.config["rl"].get("per_enabled", False):
+            state, action, reward, next_state, done, weights, indices = replay_buffer.sample(batch_size)
+            weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
+        else:
+            state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+            weights = None
+
         state = torch.FloatTensor(state).to(self.device)
         action = torch.FloatTensor(action).to(self.device)
         reward = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
@@ -179,17 +186,28 @@ class DDPGAgent:
             target_q = self.critic_target(next_state, next_action)
             y = reward + self.gamma * (1 - done) * target_q
         current_q = self.critic(state, action)
-        critic_loss = F.mse_loss(current_q, y)
+
+        td = current_q - y
+        if weights is not None:
+            critic_loss = (td.pow(2) * weights).mean()
+        else:
+            critic_loss = F.mse_loss(current_q, y)
         
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic_optimizer.step()
+
+        if self.config["rl"].get("per_enabled", False):
+            new_prios = td.detach().abs().cpu().numpy().flatten() + float(self.config["rl"].get("per_epsilon", 1e-6))
+            replay_buffer.update_priorities(indices, new_prios)
         
         # Actor loss.
         actor_loss = -self.critic(state, self.actor(state)).mean()
         
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor_optimizer.step()
         
         # Soft-update targets.
@@ -198,7 +216,67 @@ class DDPGAgent:
 
         return {"actor_loss": actor_loss.item(), "critic_loss": critic_loss.item()}
 
-        
+    def critic_update_only(self, replay_buffer, batch_size):
+        """
+        Perform a critic-only update step:
+        - Samples a batch (with PER if enabled)
+        - Computes TD‑target y and current Q
+        - Computes and backpropagates critic loss
+        - Updates PER priorities if enabled
+        Returns:
+            dict: {'critic_loss': float}
+        """
+        # 1) Sample
+        if self.config["rl"].get("per_enabled", False):
+            state, action, reward, next_state, done, weights, indices = replay_buffer.sample(batch_size)
+            weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
+        else:
+            state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+            weights = None
+
+        # 2) Tensorize
+        state      = torch.FloatTensor(state).to(self.device)
+        action     = torch.FloatTensor(action).to(self.device)
+        reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
+        next_state = torch.FloatTensor(next_state).to(self.device)
+        done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+
+        # 3) Compute TD‑target
+        with torch.no_grad():
+            next_action = self.actor_target(next_state)
+            target_q    = self.critic_target(next_state, next_action)
+            y           = reward + self.gamma * (1 - done) * target_q
+
+        # 4) Current Q and loss
+        current_q  = self.critic(state, action)
+        td_error   = current_q - y
+        if weights is not None:
+            critic_loss = (td_error.pow(2) * weights).mean()
+        else:
+            critic_loss = F.mse_loss(current_q, y)
+
+        # 5) Backprop critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        self.critic_optimizer.step()
+
+        # 6) Update PER priorities
+        if self.config["rl"].get("per_enabled", False):
+            eps = float(self.config["rl"].get("per_epsilon", 1e-6))
+            new_prios = td_error.detach().abs().cpu().numpy().flatten() + eps
+            replay_buffer.update_priorities(indices, new_prios)
+
+        return {"critic_loss": critic_loss.item()}
+
     def _soft_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - self.tau) + param.data * self.tau)
+
+
+
+
+
+
+
+

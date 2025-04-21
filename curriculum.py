@@ -51,7 +51,7 @@ def burn_in_phase(model, loader, device):
     incorrect_losses = []
     
     with torch.no_grad():
-        for imgs, labels in loader:
+        for imgs, labels in tqdm(loader, desc="Processing batches", disable=True):
             imgs, labels = imgs.to(device), labels.to(device)
             outputs = model(imgs)
             losses = ce_loss(outputs, labels)
@@ -81,20 +81,20 @@ def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperpara
         reward (float): The macro accuracy achieved after phase training,
                         computed as the average of accuracies on the easy, medium, and hard datasets.
     """
-    import torch.optim as optim
-    from tqdm import tqdm
-
     phase_batch_size = hyperparams.get("phase_batch_size", 512)
     criterion = torch.nn.CrossEntropyLoss()
 
     # Create a mixed training loader based on the provided mixing ratios.
     current_mixture = hyperparams["mixture_ratio"]
-    mixed_loader = get_mixed_loader(easy_loader.dataset,
-                                    medium_loader.dataset,
-                                    hard_loader.dataset,
-                                    current_mixture,
-                                    num_samples=hyperparams["training_samples"],
-                                    batch_size=phase_batch_size)
+    mixed_loader = get_mixed_loader(
+        easy_loader.dataset,
+        medium_loader.dataset,
+        hard_loader.dataset,
+        current_mixture,
+        num_samples=hyperparams["training_samples"],
+        batch_size=phase_batch_size
+    )
+    
     optimizer = optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
     model.train()
     phase_samples = 0
@@ -214,3 +214,11 @@ def evaluate_accuracy(model, loader, device):
             correct += (preds == labels).sum().item()
             total += labels.size(0)
     return 100.0 * correct / total
+
+
+
+
+
+
+
+

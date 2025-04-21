@@ -124,3 +124,11 @@ def plot_histogram(hist, title, filename):
     plt.ylabel("Normalized Frequency")
     plt.savefig(filename)
     plt.close()
+
+
+
+
+
+
+
+

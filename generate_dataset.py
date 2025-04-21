@@ -16,6 +16,7 @@ import torch
 import random
 import numpy as np
 import copy
+import argparse
 from tqdm import tqdm
 
 from curriculum_env import CurriculumEnv
@@ -192,7 +193,15 @@ def evolutionary_algorithm(env, num_phases, pop_size, generations, top_k, mutati
     return history
 
 def main():
-    config = load_config("config.yaml")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config", "-c",
+        default="config.yaml",
+        help="path to your config YAML"
+    )
+    args   = parser.parse_args()
+    config = load_config(args.config)
+    
     set_seed(42)
     env = CurriculumEnv(config)
     num_phases = config["curriculum"].get("max_phases", 3)
@@ -207,10 +216,10 @@ def main():
     
     history = evolutionary_algorithm(env,
                                      num_phases=num_phases,
-                                     pop_size=100,
-                                     generations=10,
-                                     top_k=10,
-                                     mutation_rate=0.1,
+                                     pop_size   = config["rl"].get("ea_pop_size", 100),
+                                     generations= config["rl"].get("ea_generations", 10),
+                                     top_k      = config["rl"].get("ea_top_k", 10),
+                                     mutation_rate = config["rl"].get("ea_mutation_rate", 0.1),
                                      macro_actions=macro_actions,
                                      candidate_dim=candidate_dim,
                                      lr_range=lr_range,
@@ -229,3 +238,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+

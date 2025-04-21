@@ -1,7 +1,3 @@
-#==========================================
-# File: curriculum_env.py
-#==========================================
-
 """
 Custom environment implementing the curriculum learning process with RL-based hyperparameter control.
 Each episode follows these stages:
@@ -72,7 +68,6 @@ class CurriculumEnv:
         self.train_samples_max = config["curriculum"]["train_samples_max"]
         self.lr_range = config["curriculum"]["learning_rate_range"]  # [min_lr, max_lr]
         self.max_phases = config["curriculum"]["max_phases"]
-        self.max_phases = config["curriculum"]["max_phases"]
         self.current_phase = 0
         self.remaining_samples = config["curriculum"]["train_samples_max"]
 
@@ -101,10 +96,12 @@ class CurriculumEnv:
         self.hard_ds = Subset(self.mnist_train, self.hard_indices)
         
         # Create DataLoaders for burn-in phase.
-        self.easy_loader = DataLoader(self.easy_ds, batch_size=self.batch_size, shuffle=True)
-        self.medium_loader = DataLoader(self.medium_ds, batch_size=self.batch_size, shuffle=True)
-        self.hard_loader = DataLoader(self.hard_ds, batch_size=self.batch_size, shuffle=True)
-    
+        self.easy_loader   = DataLoader(self.easy_ds,   batch_size=self.batch_size, shuffle=True,
+                                        num_workers=4, pin_memory=True)
+        self.medium_loader = DataLoader(self.medium_ds, batch_size=self.batch_size, shuffle=True,
+                                        num_workers=4, pin_memory=True)
+        self.hard_loader   = DataLoader(self.hard_ds,   batch_size=self.batch_size, shuffle=True,
+                                        num_workers=4, pin_memory=True)
 
     def _init_model(self):
         """
@@ -197,12 +194,14 @@ class CurriculumEnv:
         }
         
         # Run a single phase training routine.
-        reward = run_phase_training(self.model,
-                                    self.easy_loader,
-                                    self.medium_loader,
-                                    self.hard_loader,
-                                    hyperparams,
-                                    self.device)
+        reward = run_phase_training(
+            self.model,
+            self.easy_loader,
+            self.medium_loader,
+            self.hard_loader,
+            hyperparams,
+            self.device
+        )
         
         # Update internal counters.
         self.remaining_samples -= samples
@@ -212,3 +211,11 @@ class CurriculumEnv:
             reward = 10*reward
         next_obs = self.get_observation()
         return next_obs, reward, done
+
+
+
+
+
+
+
+

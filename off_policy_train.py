@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 off_policy_train.py
 
@@ -15,11 +14,15 @@ import yaml
 import torch
 import numpy as np
 import random
+import argparse
+import torch.nn as nn
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from tqdm import trange, tqdm
+
 
 from rl_agent import DDPGAgent
-from replay_buffer import ReplayBuffer
+from replay_buffer import ReplayBuffer, PERBuffer
 from curriculum_env import CurriculumEnv
 
 def set_seed(seed):
@@ -201,7 +204,17 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
 # ----- Main Training and Evaluation -----
 
 def main():
-    config = load_config("config.yaml")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config", "-c",
+        default="config.yaml",
+        help="path to your config YAML"
+    )
+    args   = parser.parse_args()
+    config = load_config(args.config)
+
+    # config = load_config("config.yaml")
+
     set_seed(42)
     
     # Create a separate directory for checkpoints/plots.
@@ -209,29 +222,166 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     
     # Load the evolutionary dataset.
-    dataset_path = os.path.join(config["paths"]["save_path"], "evolutionary_dataset.npz")
+    dataset_path = config["paths"]["pretrain_path"]
     data = np.load(dataset_path)
     states = data["states"]
     actions = data["actions"]
     rewards = data["rewards"]
     next_states = data["next_states"]
     dones = data["dones"]
-    
+
     # Populate the replay buffer.
-    replay_buffer = ReplayBuffer(config["rl"]["buffer_size"])
-    for i in range(len(states)):
-        replay_buffer.push(states[i], actions[i], rewards[i], next_states[i], dones[i])
+    if config["rl"].get("per_enabled", False):
+        replay_buffer = PERBuffer(
+            config["rl"]["buffer_size"],
+            alpha=config["rl"].get("per_alpha", 0.6),
+            beta=config["rl"].get("per_beta", 0.4),
+            epsilon=config["rl"].get("per_epsilon", 1e-6),
+            per_type=config["rl"].get("per_type", "proportional")
+        )
+    else:
+        replay_buffer = ReplayBuffer(config["rl"]["buffer_size"])
+
+    if config["rl"].get("seed_replay_buffer", False):
+        for i in tqdm(range(len(states)), desc="Seeding Replay Buffer"):
+            replay_buffer.push(states[i], actions[i], rewards[i], next_states[i], dones[i])
+        print(f"Seeded {len(replay_buffer)} transitions into the replay buffer.")
+
     print(f"Loaded {len(replay_buffer)} transitions into the replay buffer.")
-    
-    # Initialize environment to determine observation dimensions.
+
     env = CurriculumEnv(config)
     obs_dim = len(env.reset())
     action_dim = 5
     agent = DDPGAgent(obs_dim, action_dim, config)
+
+    probe_batch_size = 256
+    probe_indices    = np.random.choice(len(states), size=probe_batch_size, replace=False)
+    variance_states  = states[probe_indices]
+    variance_states_tensor = torch.FloatTensor(variance_states).to(agent.device)
     
+    if config["rl"].get("use_behavioral_cloning", False):
+        print("Starting BC pretrain with real EA data…")
+
+        # 1) Load your saved EA transitions
+        ea = np.load(dataset_path)
+        ea_states  = ea["states"]   # shape (N, state_dim)
+        ea_actions = ea["actions"]  # shape (N, action_dim)
+        ea_rewards = ea["rewards"]  # shape (N,)
+
+        # 2) Precompute sorted indices by reward
+        sorted_idx = np.argsort(ea_rewards)  # ascending
+        N = len(ea_rewards)
+
+        # 3) Pick positives/negatives based on config
+        sel = config["rl"].get("bc_trajectory_selection", "top_k")
+        if sel == "top_k":
+            k = config["rl"].get("bc_top_k", config["rl"]["batch_size"])
+            pos_idx = sorted_idx[-k:]
+            neg_idx = sorted_idx[:k]
+        elif sel == "threshold":
+            thr = config["rl"].get("bc_reward_threshold", np.median(ea_rewards))
+            pos_idx = np.where(ea_rewards >= thr)[0]
+            neg_idx = np.where(ea_rewards <  thr)[0]
+        elif sel == "percentile":
+            p = config["rl"].get("bc_percentile", 80)
+            high_thr = np.percentile(ea_rewards, p)
+            low_thr  = np.percentile(ea_rewards, 100 - p)
+            pos_idx = np.where(ea_rewards >= high_thr)[0]
+            neg_idx = np.where(ea_rewards <= low_thr)[0]
+        else:
+            raise ValueError(f"Unknown bc_trajectory_selection: {sel}")
+
+        # 4) Loss functions
+        mse_loss    = nn.MSELoss()
+        triplet_fn  = nn.TripletMarginLoss(margin=config["rl"].get("triplet_margin", 0.2)) \
+                    if config["rl"].get("use_triplet_loss", False) else None
+
+        # 5) BC loop
+        iters = config["rl"].get("pretrain_bc_iters", 1000)
+        batch = config["rl"]["batch_size"]
+        bc_losses = []
+        for _ in trange(iters, desc="BC Pretrain"):
+            # --- sample anchor transitions uniformly from EA ---
+            anc_idx = np.random.randint(0, N, size=batch)
+            s_anc   = torch.FloatTensor(ea_states[anc_idx]).to(agent.device)
+            a_anc   = torch.FloatTensor(ea_actions[anc_idx]).to(agent.device)
+
+            # --- sample positives & negatives from your selected pools ---
+            pos_samples = np.random.choice(pos_idx, size=batch, replace=True)
+            neg_samples = np.random.choice(neg_idx, size=batch, replace=True)
+            a_pos = torch.FloatTensor(ea_actions[pos_samples]).to(agent.device)
+            a_neg = torch.FloatTensor(ea_actions[neg_samples]).to(agent.device)
+
+            # --- forward & losses ---
+            pred = agent.actor(s_anc)
+            loss = mse_loss(pred, a_anc)
+            if triplet_fn:
+                loss = loss + triplet_fn(pred, a_pos, a_neg)
+
+            # --- backprop actor only ---
+            agent.actor_optimizer.zero_grad()
+            loss.backward()
+            utils.clip_grad_norm_(agent.actor.parameters(), max_norm=1.0)
+            agent.actor_optimizer.step()
+            bc_losses.append(loss.item())  
+
+        bc_actor_path = os.path.join(results_dir, "actor_after_bc.pth")
+        torch.save(agent.actor.state_dict(), bc_actor_path)
+        print(f"Saved actor (post‑BC) → {bc_actor_path}")
+
+        # 1) BC loss progression
+        plt.figure()
+        plt.plot(bc_losses)
+        plt.title("Behavior Cloning Loss Progression")
+        plt.xlabel("BC Iteration")
+        plt.ylabel("Loss")
+        plt.grid(True)
+        plt.savefig(os.path.join(results_dir, "bc_loss_progression.png"))
+        plt.close()
+
+        # 2) Mixing‐ratio distributions: EA vs. actor predictions
+        #    ea_actions is your loaded array; need to compute actor's outputs on same states
+        ea_tensor = torch.FloatTensor(ea_states).to(agent.device)
+        with torch.no_grad():
+            pred_actions = agent.actor(ea_tensor).cpu().numpy()
+
+        for idx, name in zip([1,2,3], ["Easy","Med","Hard"]):
+            plt.figure()
+            plt.hist(ea_actions[:, idx], bins=30, alpha=0.5, label="EA "+name, density=True)
+            plt.hist(pred_actions[:, idx], bins=30, alpha=0.5, label="Actor "+name, density=True)
+            plt.title(f"Mixing Ratio – {name}")
+            plt.xlabel("Ratio Value")
+            plt.ylabel("Density")
+            plt.legend()
+            plt.savefig(os.path.join(results_dir, f"bc_mixratio_{name.lower()}.png"))
+            plt.close()
+
+    if config["rl"].get("pretrain_critic_offpolicy", True):
+        print("Pretraining critic off‑policy…")
+        pre_iters = config["rl"].get("pretrain_critic_iters", 10000)
+        critic_pre_losses = []
+        for _ in trange(pre_iters, desc="Critic Pretrain"):
+            if len(replay_buffer) >= config["rl"]["batch_size"]:
+                # only update critic
+                metrics = agent.critic_update_only(replay_buffer, config["rl"]["batch_size"])
+                critic_pre_losses.append(metrics["critic_loss"])  # <— record critic loss
+        
+        critic_pre_path = os.path.join(results_dir, "critic_after_pretrain.pth")
+        torch.save(agent.critic.state_dict(), critic_pre_path)
+        print(f"Saved critic (post‑pretrain) → {critic_pre_path}")
+        
+        plt.figure()
+        plt.plot(critic_pre_losses)
+        plt.title("Critic Off‑Policy Pretrain Loss")
+        plt.xlabel("Pretrain Iteration")
+        plt.ylabel("Loss")
+        plt.grid(True)
+        plt.savefig(os.path.join(results_dir, "critic_pretrain_loss.png"))
+        plt.close()
+
     # Prepare for checkpointing.
-    num_updates = int(1e6)
-    checkpoint_interval = int(num_updates * 0.05)
+    num_updates = config["rl"].get("off_policy_updates", int(1e6))
+    checkpoint_interval = int(num_updates * 0.2)
     if checkpoint_interval == 0:
         checkpoint_interval = 1
 
@@ -241,14 +391,22 @@ def main():
     reward_progress = []
     eval_updates = []
     num_bins = config["observation"]["num_bins"]
-    
+    action_var_history = []   
+    update_steps      = []
+
     # Training loop.
-    for update in range(num_updates):
+    for update in trange(num_updates, desc="Off‑policy Training"):
         if len(replay_buffer) >= config["rl"]["batch_size"]:
             metrics = agent.update(replay_buffer, config["rl"]["batch_size"])
             if metrics is not None:
                 actor_losses.append(metrics["actor_loss"])
                 critic_losses.append(metrics["critic_loss"])
+
+        with torch.no_grad():
+            pred_actions = agent.actor(variance_states_tensor).cpu().numpy()  # (256,5)
+        var = np.var(pred_actions, axis=0)  # length‑5 vector
+        action_var_history.append(var)
+        update_steps.append(update)
         
         # Every checkpoint_interval (5% of training), run a full evaluation episode
         # and save all plots and model checkpoint.
@@ -307,29 +465,6 @@ def main():
             plt.savefig(checkpoint_reward_path)
             plt.close()
             
-            # Save aggregated Easy and Hard histogram evolution for the evaluation episode.
-            fig_eh, (ax_easy, ax_hard) = plt.subplots(2, 1, figsize=(10, 8))
-            for i in range(len(eval_episode["states"])):
-                state = eval_episode["states"][i]
-                s_break = breakdown_state(state, num_bins)
-                aggregated_easy = s_break['easy_correct_hist'] + s_break['easy_incorrect_hist']
-                aggregated_hard = s_break['hard_correct_hist'] + s_break['hard_incorrect_hist']
-                color = plt.cm.viridis(i / len(eval_episode["states"]))
-                ax_easy.plot(np.arange(len(aggregated_easy)), aggregated_easy, color=color, label=f"Phase {i+1}")
-                ax_hard.plot(np.arange(len(aggregated_hard)), aggregated_hard, color=color, label=f"Phase {i+1}")
-            ax_easy.set_title("Aggregated Easy Histogram Evolution")
-            ax_easy.set_xlabel("Bins")
-            ax_easy.set_ylabel("Normalized Frequency")
-            ax_easy.legend(fontsize=8)
-            ax_hard.set_title("Aggregated Hard Histogram Evolution")
-            ax_hard.set_xlabel("Bins")
-            ax_hard.set_ylabel("Normalized Frequency")
-            ax_hard.legend(fontsize=8)
-            checkpoint_eh_path = os.path.join(results_dir, f"aggregated_easy_hard_{update}.png")
-            fig_eh.tight_layout()
-            fig_eh.savefig(checkpoint_eh_path)
-            plt.close(fig_eh)
-            
             # Save model checkpoint.
             actor_ckpt = os.path.join(results_dir, f"off_policy_actor_{update}.pth")
             critic_ckpt = os.path.join(results_dir, f"off_policy_critic_{update}.pth")
@@ -337,7 +472,26 @@ def main():
             torch.save(agent.critic.state_dict(), critic_ckpt)
             print(f"Saved actor → {actor_ckpt}")
             print(f"Saved critic → {critic_ckpt}")
-    
+
+            # plot action‐component variances
+            action_var_array = np.vstack(action_var_history)  # shape (steps,5)
+            names = ["learning_rate","mix_easy","mix_med","mix_hard","sample_usage"]
+
+            # 5‐panel subplot, one row per action component
+            fig, axs = plt.subplots(nrows=5, ncols=1, figsize=(8,12), sharex=True)
+            for idx, name in enumerate(names):
+                axs[idx].plot(update_steps, action_var_array[:,idx])
+                axs[idx].set_ylabel("Var")
+                axs[idx].set_title(name)
+                axs[idx].grid(True)
+
+            # only bottom panel needs an x‐label
+            axs[-1].set_xlabel("Update Step")
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(results_dir, "action_variance.png"))
+            plt.close()
+                
     # After training, run one final full evaluation episode.
     eval_states = []
     eval_actions = []
@@ -402,3 +556,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+

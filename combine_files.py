@@ -51,7 +51,9 @@ if __name__ == "__main__":
         "curriculum_env.py",
         "generate_dataset.py",
         "off_policy_train.py",
-        "on_policy_train.py"
+        "on_policy_train.py",
+        "config.yaml",
+        "run_pipeline.sh"
     ]
     # Set the output file path.
     output_file = "all_in_one.py"

@@ -313,14 +313,14 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze training history from npz file with detailed figures.")
-    parser.add_argument("--npz_file", type=str, default="evolutionary_dataset.npz",
+    parser.add_argument("--npz_file", type=str, default="results/curriculum_rl/evolutionary_dataset.npz",
                         help="Path to the npz file saved by generate_dataset.py")
     parser.add_argument("--num_bins", type=int, default=64,
                         help="Number of bins used in the loss histograms in the state vector (default 64)")
     args = parser.parse_args()
     
     # Create output directory "history"
-    output_dir = "history"
+    output_dir = "history2"
     os.makedirs(output_dir, exist_ok=True)
     
     # Load data.
