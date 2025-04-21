@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # ─── Toggle which steps to run ───────────────────────────────────────────────
-RUN_DATASET=false     # set to false to skip generate_dataset.py
-RUN_OFFPOLICY=false    # set to false to skip off_policy_train.py
+RUN_DATASET=true    # set to false to skip generate_dataset.py
+RUN_OFFPOLICY=true    # set to false to skip off_policy_train.py
 RUN_on_policy=true     # set to false to skip on_policy_train.py
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -36,6 +36,10 @@ if [ "$RUN_on_policy" = true ]; then
 fi
 
 echo "Pipeline complete."
+
+
+
+
 
 
 

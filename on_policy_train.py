@@ -61,11 +61,16 @@ def main():
         agent.actor.load_state_dict(torch.load(actor_path, map_location=agent.device))
         print(f"Loaded actor from {actor_path}")
 
-    # Load critic
-    critic_path = config["paths"].get("on_policy_critic_model", None)
-    if critic_path and os.path.exists(critic_path):
-        agent.critic.load_state_dict(torch.load(critic_path, map_location=agent.device))
-        print(f"Loaded critic from {critic_path}")
+    # Load critic1
+    c1 = config["paths"].get("on_policy_critic1_model", None)
+    if c1 and os.path.exists(c1):
+        agent.critic1.load_state_dict(torch.load(c1, map_location=agent.device))
+        print(f"Loaded critic1 from {c1}")
+    # Load critic2
+    c2 = config["paths"].get("on_policy_critic2_model", None)
+    if c2 and os.path.exists(c2):
+        agent.critic2.load_state_dict(torch.load(c2, map_location=agent.device))
+        print(f"Loaded critic2 from {c2}")
 
      # ── Setup replay buffer and optionally preload from EA dataset ────────────
     if config["rl"].get("per_enabled", False):
@@ -124,7 +129,8 @@ def main():
     # Trackers
     episode_rewards    = []
     all_actor_losses   = []
-    all_critic_losses  = []
+    all_critic1_losses  = []
+    all_critic2_losses  = []
     action_var_history = []
     update_steps       = []
 
@@ -140,15 +146,18 @@ def main():
 
         # Perform multiple updates
         actor_losses  = []
-        critic_losses = []
+        critic1_losses = []
+        critic2_losses = []
         if len(replay_buffer) >= batch_size:
             for _ in range(config["rl"].get("on_policy_updates_per_episode", 10)):
                 metrics = agent.update(replay_buffer, batch_size)
                 actor_losses.append(metrics["actor_loss"])
-                critic_losses.append(metrics["critic_loss"])
+                critic1_losses.append(metrics["critic1_loss"])
+                critic2_losses.append(metrics["critic2_loss"])
 
         all_actor_losses.append(float(np.mean(actor_losses))  if actor_losses  else 0.0)
-        all_critic_losses.append(float(np.mean(critic_losses)) if critic_losses else 0.0)
+        all_critic1_losses.append(float(np.mean(critic1_losses)) if critic1_losses else 0.0)
+        all_critic2_losses.append(float(np.mean(critic2_losses)) if critic2_losses else 0.0)
         episode_rewards.append(ep_reward)
 
         # Action‑component variance
@@ -164,8 +173,8 @@ def main():
             # ── Save models ───────────────────────────────
             torch.save(agent.actor.state_dict(),
                        os.path.join(ckpt_dir, f"actor_ep{ep}.pth"))
-            torch.save(agent.critic.state_dict(),
-                       os.path.join(ckpt_dir, f"critic_ep{ep}.pth"))
+            torch.save(agent.critic1.state_dict(), os.path.join(ckpt_dir, f"critic1_ep{ep}.pth"))
+            torch.save(agent.critic2.state_dict(), os.path.join(ckpt_dir, f"critic2_ep{ep}.pth"))
 
             # ── Plot rewards ──────────────────────────────
             plt.figure()
@@ -183,10 +192,12 @@ def main():
             ax1.set_title("Actor Loss (mean per epi)")
             ax1.set_xlabel("Episode")
             ax1.set_ylabel("Loss")
-            ax2.plot(all_critic_losses, color='red')
+            ax2.plot(all_critic1_losses, color='red', label="Critic 1")
+            ax2.plot(all_critic2_losses, color='green', label="Critic 2")
             ax2.set_title("Critic Loss (mean per epi)")
             ax2.set_xlabel("Episode")
             ax2.set_ylabel("Loss")
+            ax2.legend()
             fig.tight_layout()
             fig.savefig(os.path.join(ckpt_dir, f"losses_ep{ep}.png"))
             plt.close(fig)
@@ -226,8 +237,8 @@ def main():
     # ── Final save & evaluation ───────────────────────────────
     torch.save(agent.actor.state_dict(),
                os.path.join(ckpt_dir, "actor_final.pth"))
-    torch.save(agent.critic.state_dict(),
-               os.path.join(ckpt_dir, "critic_final.pth"))
+    torch.save(agent.critic1.state_dict(), os.path.join(ckpt_dir, "critic1_final.pth"))
+    torch.save(agent.critic2.state_dict(), os.path.join(ckpt_dir, "critic2_final.pth"))
     print("Saved final actor & critic.")
 
     eval_states, eval_actions, eval_rewards = [], [], []
@@ -251,6 +262,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

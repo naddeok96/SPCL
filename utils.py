@@ -24,7 +24,12 @@ def compute_loss_histogram(losses, num_bins):
     else:
         losses = np.array(losses).flatten()
     
-    hist, _ = np.histogram(losses, bins=num_bins, range=(losses.min(), losses.max()), density=False)
+    if losses.min() == losses.max():
+        min_val, max_val = losses.min() - 1e-6, losses.max() + 1e-6
+    else:
+        min_val, max_val = losses.min(), losses.max()
+    hist, _ = np.histogram(losses, bins=num_bins, range=(min_val, max_val))
+
     hist = hist.astype(float)
     total = hist.sum()
     if total > 0:
@@ -124,6 +129,10 @@ def plot_histogram(hist, title, filename):
     plt.ylabel("Normalized Frequency")
     plt.savefig(filename)
     plt.close()
+
+
+
+
 
 
 

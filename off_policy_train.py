@@ -16,6 +16,7 @@ import numpy as np
 import random
 import argparse
 import torch.nn as nn
+import torch.optim as optim
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from tqdm import trange, tqdm
@@ -276,25 +277,34 @@ def main():
         sel = config["rl"].get("bc_trajectory_selection", "top_k")
         if sel == "top_k":
             k = config["rl"].get("bc_top_k", config["rl"]["batch_size"])
-            pos_idx = sorted_idx[-k:]
-            neg_idx = sorted_idx[:k]
+            pos_pool = sorted_idx[-k:]     # ← rename to pos_pool
+            neg_pool = sorted_idx[:k]      # ← rename to neg_pool
         elif sel == "threshold":
             thr = config["rl"].get("bc_reward_threshold", np.median(ea_rewards))
-            pos_idx = np.where(ea_rewards >= thr)[0]
-            neg_idx = np.where(ea_rewards <  thr)[0]
+            pos_pool = np.where(ea_rewards >= thr)[0]
+            neg_pool = np.where(ea_rewards <  thr)[0]
         elif sel == "percentile":
             p = config["rl"].get("bc_percentile", 80)
             high_thr = np.percentile(ea_rewards, p)
             low_thr  = np.percentile(ea_rewards, 100 - p)
-            pos_idx = np.where(ea_rewards >= high_thr)[0]
-            neg_idx = np.where(ea_rewards <= low_thr)[0]
+            pos_pool = np.where(ea_rewards >= high_thr)[0]
+            neg_pool = np.where(ea_rewards <= low_thr)[0]
         else:
             raise ValueError(f"Unknown bc_trajectory_selection: {sel}")
 
-        # 4) Loss functions
-        mse_loss    = nn.MSELoss()
-        triplet_fn  = nn.TripletMarginLoss(margin=config["rl"].get("triplet_margin", 0.2)) \
-                    if config["rl"].get("use_triplet_loss", False) else None
+        # 4) Loss function & scheduler
+        bc_loss_fn = nn.SmoothL1Loss()
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            agent.actor_optimizer,
+            mode='min',
+            factor=0.5,
+            patience=1000,
+            verbose=True
+        )
+        triplet_fn = (
+            nn.TripletMarginLoss(margin=config["rl"].get("triplet_margin", 0.2))
+            if config["rl"].get("use_triplet_loss", False) else None
+        )
 
         # 5) BC loop
         iters = config["rl"].get("pretrain_bc_iters", 1000)
@@ -306,24 +316,27 @@ def main():
             s_anc   = torch.FloatTensor(ea_states[anc_idx]).to(agent.device)
             a_anc   = torch.FloatTensor(ea_actions[anc_idx]).to(agent.device)
 
-            # --- sample positives & negatives from your selected pools ---
-            pos_samples = np.random.choice(pos_idx, size=batch, replace=True)
-            neg_samples = np.random.choice(neg_idx, size=batch, replace=True)
-            a_pos = torch.FloatTensor(ea_actions[pos_samples]).to(agent.device)
-            a_neg = torch.FloatTensor(ea_actions[neg_samples]).to(agent.device)
+            # --- sample positives & negatives from your pools ---
+            if triplet_fn:
+                pos_batch = np.random.choice(pos_pool, size=batch, replace=True)
+                neg_batch = np.random.choice(neg_pool, size=batch, replace=True)
+                a_pos = torch.FloatTensor(ea_actions[pos_batch]).to(agent.device)
+                a_neg = torch.FloatTensor(ea_actions[neg_batch]).to(agent.device)
 
             # --- forward & losses ---
             pred = agent.actor(s_anc)
-            loss = mse_loss(pred, a_anc)
+            loss = bc_loss_fn(pred, a_anc)
             if triplet_fn:
                 loss = loss + triplet_fn(pred, a_pos, a_neg)
 
             # --- backprop actor only ---
             agent.actor_optimizer.zero_grad()
             loss.backward()
-            utils.clip_grad_norm_(agent.actor.parameters(), max_norm=1.0)
+            nn.utils.clip_grad_norm_(agent.actor.parameters(), max_norm=1.0)
             agent.actor_optimizer.step()
-            bc_losses.append(loss.item())  
+            scheduler.step(loss)
+
+            bc_losses.append(loss.item())
 
         bc_actor_path = os.path.join(results_dir, "actor_after_bc.pth")
         torch.save(agent.actor.state_dict(), bc_actor_path)
@@ -359,24 +372,33 @@ def main():
     if config["rl"].get("pretrain_critic_offpolicy", True):
         print("Pretraining critic off‑policy…")
         pre_iters = config["rl"].get("pretrain_critic_iters", 10000)
-        critic_pre_losses = []
+        critic1_pre_losses = []
+        critic2_pre_losses = []
         for _ in trange(pre_iters, desc="Critic Pretrain"):
             if len(replay_buffer) >= config["rl"]["batch_size"]:
                 # only update critic
                 metrics = agent.critic_update_only(replay_buffer, config["rl"]["batch_size"])
-                critic_pre_losses.append(metrics["critic_loss"])  # <— record critic loss
+                critic1_pre_losses.append(metrics["critic1_loss"])
+                critic2_pre_losses.append(metrics["critic2_loss"])
         
-        critic_pre_path = os.path.join(results_dir, "critic_after_pretrain.pth")
-        torch.save(agent.critic.state_dict(), critic_pre_path)
-        print(f"Saved critic (post‑pretrain) → {critic_pre_path}")
+         # Save both critics
+        critic1_pre_path = os.path.join(results_dir, "critic1_after_pretrain.pth")
+        critic2_pre_path = os.path.join(results_dir, "critic2_after_pretrain.pth")
+        torch.save(agent.critic1.state_dict(), critic1_pre_path)
+        torch.save(agent.critic2.state_dict(), critic2_pre_path)
+        print(f"Saved critic1 → {critic1_pre_path}")
+        print(f"Saved critic2 → {critic2_pre_path}")
         
+        # Plot both losses
         plt.figure()
-        plt.plot(critic_pre_losses)
-        plt.title("Critic Off‑Policy Pretrain Loss")
-        plt.xlabel("Pretrain Iteration")
+        plt.plot(critic1_pre_losses, label="Critic1 Loss")
+        plt.plot(critic2_pre_losses, label="Critic2 Loss")
+        plt.title("Critic Off‑Policy Pretrain Losses")
+        plt.xlabel("Iteration")
         plt.ylabel("Loss")
+        plt.legend()
         plt.grid(True)
-        plt.savefig(os.path.join(results_dir, "critic_pretrain_loss.png"))
+        plt.savefig(os.path.join(results_dir, "critic_pretrain_losses.png"))
         plt.close()
 
     # Prepare for checkpointing.
@@ -387,7 +409,8 @@ def main():
 
     # Lists for tracking metrics over training.
     actor_losses = []
-    critic_losses = []
+    critic1_losses = []
+    critic2_losses = []
     reward_progress = []
     eval_updates = []
     num_bins = config["observation"]["num_bins"]
@@ -400,8 +423,8 @@ def main():
             metrics = agent.update(replay_buffer, config["rl"]["batch_size"])
             if metrics is not None:
                 actor_losses.append(metrics["actor_loss"])
-                critic_losses.append(metrics["critic_loss"])
-
+                critic1_losses.append(metrics["critic1_loss"])
+                critic2_losses.append(metrics["critic2_loss"])
         with torch.no_grad():
             pred_actions = agent.actor(variance_states_tensor).cpu().numpy()  # (256,5)
         var = np.var(pred_actions, axis=0)  # length‑5 vector
@@ -446,10 +469,12 @@ def main():
             ax_actor.set_title("Actor Loss Progression")
             ax_actor.set_xlabel("Update Steps")
             ax_actor.set_ylabel("Loss")
-            ax_critic.plot(critic_losses, color='red')
+            ax_critic.plot(critic1_losses, label="Critic1")
+            ax_critic.plot(critic2_losses, label="Critic2")
             ax_critic.set_title("Critic Loss Progression")
             ax_critic.set_xlabel("Update Steps")
             ax_critic.set_ylabel("Loss")
+            ax_critic.legend()
             checkpoint_loss_path = os.path.join(results_dir, f"training_losses_{update}.png")
             fig_loss.tight_layout()
             fig_loss.savefig(checkpoint_loss_path)
@@ -467,11 +492,14 @@ def main():
             
             # Save model checkpoint.
             actor_ckpt = os.path.join(results_dir, f"off_policy_actor_{update}.pth")
-            critic_ckpt = os.path.join(results_dir, f"off_policy_critic_{update}.pth")
             torch.save(agent.actor.state_dict(), actor_ckpt)
-            torch.save(agent.critic.state_dict(), critic_ckpt)
             print(f"Saved actor → {actor_ckpt}")
-            print(f"Saved critic → {critic_ckpt}")
+            crit1_ckpt = os.path.join(results_dir, f"off_policy_critic1_{update}.pth")
+            crit2_ckpt = os.path.join(results_dir, f"off_policy_critic2_{update}.pth")
+            torch.save(agent.critic1.state_dict(), crit1_ckpt)
+            torch.save(agent.critic2.state_dict(), crit2_ckpt)
+            print(f"Saved critic1 → {crit1_ckpt}")
+            print(f"Saved critic2 → {crit2_ckpt}")
 
             # plot action‐component variances
             action_var_array = np.vstack(action_var_history)  # shape (steps,5)
@@ -521,11 +549,16 @@ def main():
     # Final actor save
     final_actor = os.path.join(results_dir, "off_policy_actor_model_final.pth")
     torch.save(agent.actor.state_dict(), final_actor)
-    final_critic = os.path.join(results_dir, "off_policy_critic_model_final.pth")
-    torch.save(agent.critic.state_dict(), final_critic)
+
+    final_critic1 = os.path.join(results_dir, "off_policy_critic1_model_final.pth")
+    final_critic2 = os.path.join(results_dir, "off_policy_critic2_model_final.pth")
+
+    torch.save(agent.critic1.state_dict(), final_critic1)
+    torch.save(agent.critic2.state_dict(), final_critic2)
 
     print(f"Saved final actor → {final_actor}")
-    print(f"Saved final critic → {final_critic}")
+    print(f"Saved final critic 1 → {final_critic1}")
+    print(f"Saved final critic 2 → {final_critic2}")
     
     # Plot final actor and critic loss progression on separate subplots.
     fig_loss, (ax_actor, ax_critic) = plt.subplots(2, 1, figsize=(8, 10))
@@ -533,10 +566,12 @@ def main():
     ax_actor.set_title("Actor Loss Progression")
     ax_actor.set_xlabel("Update Steps")
     ax_actor.set_ylabel("Loss")
-    ax_critic.plot(critic_losses, color='red')
+    ax_critic.plot(critic1_losses, color='red', label="Critic 1")
+    ax_critic.plot(critic2_losses, color='green', label="Critic 2")
     ax_critic.set_title("Critic Loss Progression")
     ax_critic.set_xlabel("Update Steps")
     ax_critic.set_ylabel("Loss")
+    ax_critic.legend()
     final_loss_plot = os.path.join(results_dir, "training_losses_final.png")
     fig_loss.tight_layout()
     fig_loss.savefig(final_loss_plot)
@@ -556,6 +591,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

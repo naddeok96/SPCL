@@ -32,7 +32,7 @@ class SimpleMLP(nn.Module):
         x = self.fc(x)
         return x
 
-def burn_in_phase(model, loader, device):
+def eval_loader(model, loader, device):
     """
     Runs a burn-in phase on a given loader to compute per-sample losses and accuracies.
     
@@ -214,6 +214,10 @@ def evaluate_accuracy(model, loader, device):
             correct += (preds == labels).sum().item()
             total += labels.size(0)
     return 100.0 * correct / total
+
+
+
+
 
 
 

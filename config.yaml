@@ -1,5 +1,3 @@
-# File: config.yaml
-
 # Compute device for training. Change to "cpu" if no GPU is available.
 device: "cuda:1"
 
@@ -7,92 +5,98 @@ device: "cuda:1"
 batch_size: 512
 
 fractions:
-  easy: 0.9      # Proportion of samples considered “easy”
-  medium: 0.075  # Proportion of samples considered “medium”
+  easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
+  easy_upper: 0.95
+  medium_lower: 0.03    # medium ≥ 0
+  hard_min: 0.02         # ensure hard ≥ 0.02
+
+# Define the model search space for dynamic architectures
+model_space:
+  n_convs_choices: [1, 2]
+  conv_channels_choices: [16, 32, 64]
+  n_fcs_choices: [1, 2]
+  fc_units_choices: [128, 256, 512]
+  activations: ["ReLU", "LeakyReLU"]
+  dropout_rates: [0.0, 0.2, 0.5]
 
 curriculum:
-  train_samples_max: 240000
-  learning_rate_range: [0.001, 0.01]  # narrower LR range for smoother updates
+  train_samples_max: 180000
+  learning_rate_range: [0.001, 0.01]
   max_phases: 3
   min_sample_usage: 100
 
 rl:
-  # Evolutionary algorithm settings 
   ea_pop_size:      100
-  ea_generations:   10
+  ea_generations:   100
   ea_top_k:         10
   ea_mutation_rate: 0.1
 
-  # Off‑policy pretrain (reduced iterations for faster turnaround)
   pretrain_bc_iters:       1000000
   pretrain_critic_iters:   1000000
   off_policy_updates:      1000000
-  
-  # On‑policy training (tuned)
-  on_policy_episodes:           100000    # fewer, more meaningful episodes
-  on_policy_updates_per_episode: 1     # extra updates per episode for stability
-  batch_size:                    256    # smaller batches for on‑policy updates
+
+  policy_delay: 2
+  policy_noise: 0.2
+  noise_clip:   0.5
+
+  on_policy_episodes:            100000
+  on_policy_updates_per_episode: 1
+  batch_size:                    256
   probe_from_ea:                 true
   probe_batch_size:              128
 
-  # Learning rates for actor & critic
-  actor_lr: 0.0003
+  actor_lr:  0.0003
   critic_lr: 0.001
 
-  # Discount & target‐update smoothing
-  gamma: 0.95
-  tau:   0.01
+  gamma: 0.99
+  tau:   0.005
 
-  # Exploration noise
   exploration_noise: 0.2
 
-  # Prioritized replay: disabled for on‑policy simplicity
-  per_enabled: false
+  per_enabled: true
   per_type:    "proportional"
   per_alpha:   0.6
   per_beta:    0.4
   per_epsilon: 1e-6
 
-  # Behavioral cloning settings (unchanged)s
-  use_behavioral_cloning: true
-  bc_trajectory_selection: "top_k"
-  bc_top_k:               250
-  bc_reward_threshold:    0.5
-  bc_percentile:          80
-  use_triplet_loss:       true
-  triplet_margin:         0.2
+  use_behavioral_cloning:    true
+  bc_trajectory_selection:   "top_k"
+  bc_top_k:                  250
+  bc_reward_threshold:       0.5
+  bc_percentile:             80
+  use_triplet_loss:          true
+  triplet_margin:            0.2
   pretrain_critic_offpolicy: true
 
-  # Replay buffer size
   seed_replay_buffer: true
-  buffer_size: 1000000
+  buffer_size:         1000000
 
 observation:
-  num_bins: 64  # Number of bins for each loss histogram
+  num_bins: 16
 
 paths:
   save_path:                  "results/curriculum_rl"
   data_path:                  "./data"
   pretrain_path:              "results/curriculum_rl/evolutionary_dataset.npz"
   off_policy_actor_model:     "results/off_policy/off_policy_actor_model_final.pth"
-  off_policy_critic_model:    "results/off_policy/off_policy_critic_model_final.pth"
-  on_policy_dir:              "results/on_policy"
-  on_policy_actor_model:      "results/off_policy/off_policy_actor_model_final.pth"
-  on_policy_critic_model:     "results/off_policy/off_policy_critic_model_final.pth"
+  off_policy_critic1_model:   "results/off_policy/off_policy_critic1_model_final.pth"
+  off_policy_critic2_model:   "results/off_policy/off_policy_critic2_model_final.pth"
 
-# Global random seed for reproducibility
-seed: 42
-
+  on_policy_dir:       "results/on_policy"
+  on_policy_actor_model:    "results/off_policy/off_policy_actor_model_final.pth"
+  on_policy_critic1_model:  "results/off_policy/off_policy_critic1_model_final.pth"
+  on_policy_critic2_model:  "results/off_policy/off_policy_critic2_model_final.pth"
 
 compare_models:
   Off Policy Start:
-    actor:  "results/off_policy/off_policy_actor_0.pth"
-    critic: "results/off_policy/off_policy_critic_0.pth"
+    actor:   "results/off_policy/off_policy_actor_0.pth"
+    critic1: "results/off_policy/off_policy_critic1_0.pth"
+    critic2: "results/off_policy/off_policy_critic2_0.pth"
   Off Policy End:
-    actor:  "results/off_policy/off_policy_actor_model_final.pth"
-    critic: "results/off_policy/off_policy_critic_model_final.pth"
-  On Policy Start:
-    actor:  "results/on_policy/actor_ep10.pth"
-    critic: "results/on_policy/critic_ep10.pth"
-  
+    actor:   "results/off_policy/off_policy_actor_model_final.pth"
+    critic1: "results/off_policy/off_policy_critic1_model_final.pth"
+    critic2: "results/off_policy/off_policy_critic2_model_final.pth"
+
+seed: 42
+
 

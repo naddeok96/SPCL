@@ -14,33 +14,23 @@ class Actor(nn.Module):
     def __init__(self, obs_dim, lr_range, action_dim=5):
         """
         Actor network mapping observation to final action parameters.
-        
-        The network outputs:
-          - Learning rate: scaled to be in the range [lr_range[0], lr_range[1]].
-          - Mixing ratios: softmax over the three values (indices 1-3).
-          - Sample usage fraction: a number between 0 and 1 (via sigmoid) that is later scaled.
-        
-        Args:
-            obs_dim (int): Dimension of the observation vector.
-            lr_range (list or tuple): [min_lr, max_lr] defining the learning rate range.
-            action_dim (int): Dimension of the action vector (default 5).
         """
         super(Actor, self).__init__()
         self.fc1 = nn.Linear(obs_dim, 256)
         self.fc2 = nn.Linear(256, 128)
+        self.dropout = nn.Dropout(p=0.2)           # ← added dropout
         self.out = nn.Linear(128, action_dim)
         self.lr_range = lr_range  # e.g., [0.001, 0.1]
-        
+
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        raw = self.out(x)  # shape: (batch, 5)
+        x = self.dropout(x)                       # ← apply dropout here
+        raw = self.out(x)                         # shape: (batch, 5)
         # Map index 0 to a learning rate in [min_lr, max_lr]
-        lr_offset = self.lr_range[0]
-        lr_max = self.lr_range[1]
-        # Sigmoid outputs a value in (0, 1) that we scale to the desired range.
+        lr_offset, lr_max = self.lr_range
         lr = lr_offset + (lr_max - lr_offset) * torch.sigmoid(raw[:, 0:1])
-        # Convert indices 1-3 to valid mixing ratios via softmax.
+        # Convert indices 1–3 to valid mixing ratios via softmax.
         mix = F.softmax(raw[:, 1:4], dim=-1)
         # For sample usage (index 4), use a sigmoid to have values between 0 and 1.
         sample_usage = torch.sigmoid(raw[:, 4:5])
@@ -88,195 +78,240 @@ class OUNoise:
 
 class DDPGAgent:
     def __init__(self, obs_dim, action_dim, config):
-        """
-        DDPG Agent with actor and critic networks.
-        
-        Args:
-            obs_dim (int): Dimension of observation space.
-            action_dim (int): Dimension of action space (should be 15).
-            config (dict): RL related hyperparameters from the configuration file.
-        """
         self.device = torch.device(config["device"])
+        self.config = config
 
-        self.lr_range = config["curriculum"]["learning_rate_range"]
-        
-        self.actor = Actor(obs_dim, config["curriculum"]["learning_rate_range"], action_dim).to(self.device)
+        # networks
+        self.actor        = Actor(obs_dim, config["curriculum"]["learning_rate_range"], action_dim).to(self.device)
         self.actor_target = Actor(obs_dim, config["curriculum"]["learning_rate_range"], action_dim).to(self.device)
 
-        self.critic = Critic(obs_dim, action_dim).to(self.device)
-        self.critic_target = Critic(obs_dim, action_dim).to(self.device)
-        
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=config["rl"]["actor_lr"])
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=config["rl"]["critic_lr"])
-        
-        # Copy weights from the networks to the targets.
+        self.critic1        = Critic(obs_dim, action_dim).to(self.device)
+        self.critic1_target = Critic(obs_dim, action_dim).to(self.device)
+        self.critic2        = Critic(obs_dim, action_dim).to(self.device)
+        self.critic2_target = Critic(obs_dim, action_dim).to(self.device)
+
+        # copy weights
         self._hard_update(self.actor_target, self.actor)
-        self._hard_update(self.critic_target, self.critic)
-        
-        self.gamma = config["rl"]["gamma"]
-        self.tau = config["rl"]["tau"]
-        self.exploration_noise = config["rl"]["exploration_noise"]
+        self._hard_update(self.critic1_target, self.critic1)
+        self._hard_update(self.critic2_target, self.critic2)
+
+        self.actor_target.eval()
+        self.critic1_target.eval()
+        self.critic2_target.eval()
+
+        # optimizers
+        self.actor_optimizer  = optim.Adam(self.actor.parameters(),  lr=config["rl"]["actor_lr"])
+        self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=config["rl"]["critic_lr"])
+        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=config["rl"]["critic_lr"])
+
+        # noise & counters
         self.ou_noise = OUNoise(action_dim)
-        self.config = config
-        
-    def _hard_update(self, target, source):
-        for target_param, param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(param.data)
+        self.total_it = 0
+        # save for annealing
+        self.exploration_noise_initial = config["rl"]["exploration_noise"]
+        self.exploration_noise = self.exploration_noise_initial
+        self.policy_delay   = config["rl"].get("policy_delay", 2)
+        self.policy_noise   = config["rl"].get("policy_noise", 0.2)
+        self.noise_clip     = config["rl"].get("noise_clip", 0.5)
+        self.max_updates    = config["rl"]["off_policy_updates"]
+
+        # hyperparams
+        self.gamma = config["rl"]["gamma"]
+        self.tau   = config["rl"]["tau"]
+
+    def _hard_update(self, tgt, src):
+        for t, s in zip(tgt.parameters(), src.parameters()):
+            t.data.copy_(s.data)
+
+    def _soft_update(self, tgt, src):
+        for t, s in zip(tgt.parameters(), src.parameters()):
+            t.data.copy_( t.data * (1 - self.tau) + s.data * self.tau )
 
     def select_action(self, state, noise_enable=True):
-        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        s = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         self.actor.eval()
         with torch.no_grad():
-            action = self.actor(state).cpu().data.numpy().flatten()
+            a = self.actor(s).cpu().numpy().flatten()
         self.actor.train()
 
         if noise_enable:
-            noise = self.ou_noise.noise()
-            # Only perturb mixing ratios (1–3) and sample usage (4)
-            action[1:4] += noise[1:4] * self.exploration_noise
-            action[4:5] += noise[4:5] * self.exploration_noise
+            n = self.ou_noise.noise() * self.exploration_noise
+            a[1:4] += n[1:4]
+            a[4:5] += n[4:5]
 
-        # 1) Clip learning rate to valid range
-        min_lr, max_lr = self.lr_range
-        action[0] = float(np.clip(action[0], min_lr, max_lr))
-
-        # 2) Renormalize mixing ratios to be non-negative & sum→1
-        mix = action[1:4]
-        mix = np.maximum(mix, 0.0)
+        # clip & renormalize
+        mn, mx = self.config["curriculum"]["learning_rate_range"]
+        a[0] = float(np.clip(a[0], mn, mx))
+        mix = np.maximum(a[1:4], 0.0)
         s = mix.sum()
-        if s > 0:
-            mix /= s
-        else:
-            mix = np.ones_like(mix) / len(mix)
-        action[1:4] = mix
-
-        # 3) Clip sample usage fraction to [0,1]
-        action[4] = float(np.clip(action[4], 0.0, 1.0))
-
-        return action
-
-    def _softmax_over_head(self, x):
-        exp_x = np.exp(x - np.max(x))
-        return exp_x / exp_x.sum()
-
-    def update(self, replay_buffer, batch_size):
-        """
-        Update actor and critic networks based on samples from the replay buffer.
-        
-        Args:
-            replay_buffer (ReplayBuffer): The replay buffer instance.
-            batch_size (int): The size of the batch to sample.
-        """
-        if self.config["rl"].get("per_enabled", False):
-            state, action, reward, next_state, done, weights, indices = replay_buffer.sample(batch_size)
-            weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
-        else:
-            state, action, reward, next_state, done = replay_buffer.sample(batch_size)
-            weights = None
-
-        state = torch.FloatTensor(state).to(self.device)
-        action = torch.FloatTensor(action).to(self.device)
-        reward = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
-        
-        # Critic loss.
-        with torch.no_grad():
-            next_action = self.actor_target(next_state)
-            target_q = self.critic_target(next_state, next_action)
-            y = reward + self.gamma * (1 - done) * target_q
-        current_q = self.critic(state, action)
-
-        td = current_q - y
-        if weights is not None:
-            critic_loss = (td.pow(2) * weights).mean()
-        else:
-            critic_loss = F.mse_loss(current_q, y)
-        
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
-        self.critic_optimizer.step()
-
-        if self.config["rl"].get("per_enabled", False):
-            new_prios = td.detach().abs().cpu().numpy().flatten() + float(self.config["rl"].get("per_epsilon", 1e-6))
-            replay_buffer.update_priorities(indices, new_prios)
-        
-        # Actor loss.
-        actor_loss = -self.critic(state, self.actor(state)).mean()
-        
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
-        self.actor_optimizer.step()
-        
-        # Soft-update targets.
-        self._soft_update(self.actor_target, self.actor)
-        self._soft_update(self.critic_target, self.critic)
-
-        return {"actor_loss": actor_loss.item(), "critic_loss": critic_loss.item()}
-
+        a[1:4] = mix / s if s>0 else np.ones(3)/3
+        a[4] = float(np.clip(a[4], 0,1))
+        return a
+    
     def critic_update_only(self, replay_buffer, batch_size):
         """
-        Perform a critic-only update step:
-        - Samples a batch (with PER if enabled)
-        - Computes TD‑target y and current Q
-        - Computes and backpropagates critic loss
-        - Updates PER priorities if enabled
+        Perform a critic-only update step for *both* critic1 and critic2.
         Returns:
-            dict: {'critic_loss': float}
+            {'critic1_loss': float, 'critic2_loss': float}
         """
-        # 1) Sample
+        self.total_it += 1
+
+        # 1) Sample (with PER if enabled)
         if self.config["rl"].get("per_enabled", False):
-            state, action, reward, next_state, done, weights, indices = replay_buffer.sample(batch_size)
+            state, action, reward, next_state, done, weights, idxs = replay_buffer.sample(batch_size)
             weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
+        else:
+            state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+            idxs, weights = None, None
+
+        # 2) To tensors
+        s  = torch.FloatTensor(state).to(self.device)
+        a  = torch.FloatTensor(action).to(self.device)
+        r  = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
+        ns = torch.FloatTensor(next_state).to(self.device)
+        d  = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+
+        # 3) Compute common TD‑target using both target critics
+        with torch.no_grad():
+            na = self.actor_target(ns)
+            noise = (torch.randn_like(na) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
+            na = na + noise
+
+            min_lr, max_lr = self.config["curriculum"]["learning_rate_range"]
+            na[:, 0:1] = na[:, 0:1].clamp(min_lr, max_lr)   # learning rate
+            na[:, 1:4] = na[:, 1:4].clamp(0.0, 1.0)          # mixing ratios
+            na[:, 4:5] = na[:, 4:5].clamp(0.0, 1.0)          # sample usage
+
+            tq1 = self.critic1_target(ns, na)
+            tq2 = self.critic2_target(ns, na)
+            y   = r + self.gamma * (1 - d) * torch.min(tq1, tq2)
+
+        # 4) Current Q & losses
+        cq1 = self.critic1(s, a)
+        cq2 = self.critic2(s, a)
+        td1 = cq1 - y
+        td2 = cq2 - y
+
+        if weights is not None:
+            loss1 = (td1.pow(2) * weights).mean()
+            loss2 = (td2.pow(2) * weights).mean()
+        else:
+            loss1 = F.smooth_l1_loss(cq1, y)
+            loss2 = F.smooth_l1_loss(cq2, y)
+
+        # 5) Backprop critic1
+        self.critic1_optimizer.zero_grad()
+        loss1.backward()
+        utils.clip_grad_norm_(self.critic1.parameters(), 1.0)
+        self.critic1_optimizer.step()
+
+        # 6) Backprop critic2
+        self.critic2_optimizer.zero_grad()
+        loss2.backward()
+        utils.clip_grad_norm_(self.critic2.parameters(), 1.0)
+        self.critic2_optimizer.step()
+
+        # 7) PER priority update if used (use td1)
+        if idxs is not None:
+            eps = float(self.config["rl"].get("per_epsilon", 1e-6))
+            new_prios = td1.detach().abs().cpu().numpy().flatten() + eps
+            replay_buffer.update_priorities(idxs, new_prios)
+
+        return {
+            "critic1_loss": loss1.item(),
+            "critic2_loss": loss2.item()
+        }
+
+    def update(self, replay_buffer, batch_size):
+        self.total_it += 1
+
+        # 1) sample
+        if self.config["rl"].get("per_enabled", False):
+            state, action, reward, next_state, done, weights, idxs = replay_buffer.sample(batch_size)
+            weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
+            # anneal β
+            replay_buffer.beta = min(1.0,
+                replay_buffer.beta + (1.0 - self.config["rl"]["per_beta"]) * (self.total_it/self.max_updates)
+            )
         else:
             state, action, reward, next_state, done = replay_buffer.sample(batch_size)
             weights = None
 
-        # 2) Tensorize
-        state      = torch.FloatTensor(state).to(self.device)
-        action     = torch.FloatTensor(action).to(self.device)
-        reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+        # 2) to tensors
+        s = torch.FloatTensor(state).to(self.device)
+        a = torch.FloatTensor(action).to(self.device)
+        r = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
+        ns= torch.FloatTensor(next_state).to(self.device)
+        d = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
 
-        # 3) Compute TD‑target
+        # 3) compute target actions with smoothing
         with torch.no_grad():
-            next_action = self.actor_target(next_state)
-            target_q    = self.critic_target(next_state, next_action)
-            y           = reward + self.gamma * (1 - done) * target_q
+            na = self.actor_target(ns)
+            noise = (torch.randn_like(na)*self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
 
-        # 4) Current Q and loss
-        current_q  = self.critic(state, action)
-        td_error   = current_q - y
+            na = na + noise   
+
+            min_lr, max_lr = self.config["curriculum"]["learning_rate_range"]
+            na[:, 0:1] = na[:, 0:1].clamp(min_lr, max_lr)   # learning rate
+            na[:, 1:4] = na[:, 1:4].clamp(0.0, 1.0)          # mixing ratios
+            na[:, 4:5] = na[:, 4:5].clamp(0.0, 1.0)          # sample usage
+
+            tq1 = self.critic1_target(ns, na)
+            tq2 = self.critic2_target(ns, na)
+            y   = r + self.gamma * (1-d) * torch.min(tq1, tq2)
+
+        # 4) critic losses
+        cq1 = self.critic1(s,a)
+        cq2 = self.critic2(s,a)
+        td1 = cq1 - y; td2 = cq2 - y
         if weights is not None:
-            critic_loss = (td_error.pow(2) * weights).mean()
+            loss1 = (td1.pow(2)*weights).mean()
+            loss2 = (td2.pow(2)*weights).mean()
         else:
-            critic_loss = F.mse_loss(current_q, y)
+            loss1 = F.smooth_l1_loss(cq1, y)
+            loss2 = F.smooth_l1_loss(cq2, y)
 
-        # 5) Backprop critic
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
-        self.critic_optimizer.step()
+        # 5) optimize critics
+        self.critic1_optimizer.zero_grad()
+        loss1.backward()
+        utils.clip_grad_norm_(self.critic1.parameters(),1.0)
+        self.critic1_optimizer.step()
 
-        # 6) Update PER priorities
+        self.critic2_optimizer.zero_grad()
+        loss2.backward()
+        utils.clip_grad_norm_(self.critic2.parameters(),1.0)
+        self.critic2_optimizer.step()
+
+        # 6) delayed actor & target updates
+        actor_loss = None
+        if self.total_it % self.policy_delay == 0:
+            actor_loss = -self.critic1(s, self.actor(s)).mean()
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            utils.clip_grad_norm_(self.actor.parameters(),1.0)
+            self.actor_optimizer.step()
+
+            # soft‑update all targets
+            self._soft_update(self.actor_target, self.actor)
+            self._soft_update(self.critic1_target, self.critic1)
+            self._soft_update(self.critic2_target, self.critic2)
+
+        # 7) anneal exploration noise
+        self.exploration_noise = max(
+            0.05,
+            self.exploration_noise_initial * (1 - self.total_it/self.max_updates)
+        )
+
+        # 8) update priorities
         if self.config["rl"].get("per_enabled", False):
-            eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            new_prios = td_error.detach().abs().cpu().numpy().flatten() + eps
-            replay_buffer.update_priorities(indices, new_prios)
+            new_prios = (td1.abs().detach().cpu().numpy().flatten() + self.config["rl"]["per_epsilon"])
+            replay_buffer.update_priorities(idxs, new_prios)
 
-        return {"critic_loss": critic_loss.item()}
-
-    def _soft_update(self, target, source):
-        for target_param, param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - self.tau) + param.data * self.tau)
-
-
-
-
-
+        return {
+            "actor_loss":  actor_loss.item()  if actor_loss is not None else None,
+            "critic1_loss": loss1.item(),
+            "critic2_loss": loss2.item()
+        }
 
 
 
