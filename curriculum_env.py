@@ -272,13 +272,12 @@ class CurriculumEnv:
         sample_frac = action[4]
 
         samples = int(sample_frac * self.remaining_samples)
-        samples = max(samples, self.config["curriculum"].get("min_sample_usage", 100))
 
         hyperparams = {
             "training_samples": samples,
             "learning_rate": lr,
             "mixture_ratio": mixing_ratio.tolist(),
-            "phase_batch_size": 512
+            "phase_batch_size": self.config["curriculum"].get("student_batch_size", 1024)
         }
 
         reward = run_phase_training(
@@ -301,5 +300,7 @@ class CurriculumEnv:
             reward *= 10
         next_obs = self.get_observation()
         return next_obs, reward, done
+
+
 
 
