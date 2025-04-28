@@ -53,7 +53,13 @@ if __name__ == "__main__":
         "off_policy_train.py",
         "on_policy_train.py",
         "config.yaml",
-        "run_pipeline.sh"
+
+        "analyze_history.py",
+        "eval_population.py",
+        "init_population.py",
+        "merge_history.py",
+        "population_utils.py",
+        "run_evolution.sh"
     ]
     # Set the output file path.
     output_file = "all_in_one.py"
