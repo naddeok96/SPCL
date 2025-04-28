@@ -57,8 +57,8 @@ def eval_loader(model, loader, device):
             losses = ce_loss(outputs, labels)
             preds = outputs.argmax(dim=1)
             correct_mask = (preds == labels)
-            correct_losses.extend(losses[correct_mask].cpu().numpy())
-            incorrect_losses.extend(losses[~correct_mask].cpu().numpy())
+            correct_losses.extend(losses[correct_mask])
+            incorrect_losses.extend(losses[~correct_mask])
     return correct_losses, incorrect_losses
 
 def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperparams, device):
@@ -81,7 +81,7 @@ def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperpara
         reward (float): The macro accuracy achieved after phase training,
                         computed as the average of accuracies on the easy, medium, and hard datasets.
     """
-    phase_batch_size = hyperparams.get("phase_batch_size", 512)
+    phase_batch_size = hyperparams.get("phase_batch_size", 1024)
     criterion = torch.nn.CrossEntropyLoss()
 
     # Create a mixed training loader based on the provided mixing ratios.
@@ -214,6 +214,8 @@ def evaluate_accuracy(model, loader, device):
             correct += (preds == labels).sum().item()
             total += labels.size(0)
     return 100.0 * correct / total
+
+
 
 
 
