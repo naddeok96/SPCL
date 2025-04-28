@@ -13,8 +13,6 @@ curriculum:
   max_phases: 3   # The number of curriculum phases used during training.
   # Optional: offset for learning rate mapping
   lr_offset: 0.0001
-  # Optional: minimum samples to use in a phase
-  min_sample_usage: 100
 
 rl:
   actor_lr: 1e-4
