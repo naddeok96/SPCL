@@ -2,7 +2,7 @@
 device: "cuda:1"
 
 # Global batch size for data loaders (burn‑in, curriculum phases, etc.)
-batch_size: 512
+batch_size: 1024
 
 fractions:
   easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
@@ -12,34 +12,34 @@ fractions:
 
 # Define the model search space for dynamic architectures
 model_space:
-  n_convs_choices: [1, 2]
-  conv_channels_choices: [16, 32, 64]
+  n_convs_choices: [1]
+  conv_channels_choices: [8, 16]
   n_fcs_choices: [1, 2]
-  fc_units_choices: [128, 256, 512]
-  activations: ["ReLU", "LeakyReLU"]
+  fc_units_choices: [128, 256]
+  activations: ["ReLU"]
   dropout_rates: [0.0, 0.2, 0.5]
 
 curriculum:
   train_samples_max: 180000
   learning_rate_range: [0.001, 0.01]
   max_phases: 3
-  min_sample_usage: 100
+  student_batch_size: 1024
 
 rl:
-  ea_pop_size:      100
-  ea_generations:   100
-  ea_top_k:         10
+  ea_pop_size:      256
+  ea_generations:   16
+  ea_top_k:         3
   ea_mutation_rate: 0.1
 
-  pretrain_bc_iters:       1000000
-  pretrain_critic_iters:   1000000
-  off_policy_updates:      1000000
+  pretrain_bc_iters:       100000
+  pretrain_critic_iters:   100000
+  off_policy_updates:      10000
 
   policy_delay: 2
   policy_noise: 0.2
   noise_clip:   0.5
 
-  on_policy_episodes:            100000
+  on_policy_episodes:            10000
   on_policy_updates_per_episode: 1
   batch_size:                    256
   probe_from_ea:                 true
@@ -98,5 +98,7 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
+
+
 
 
