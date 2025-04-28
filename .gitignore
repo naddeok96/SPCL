@@ -178,3 +178,7 @@ all_in_one.py
 data/
 history/
 results/
+history*
+pids.txt
+populations/
+eval_parts/
