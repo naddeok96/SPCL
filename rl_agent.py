@@ -304,14 +304,13 @@ class DDPGAgent:
 
         # 8) update priorities
         if self.config["rl"].get("per_enabled", False):
-            new_prios = (td1.abs().detach().cpu().numpy().flatten() + self.config["rl"]["per_epsilon"])
+            new_prios = (td1.abs().detach().cpu().numpy().flatten() + float(self.config["rl"]["per_epsilon"]))
             replay_buffer.update_priorities(idxs, new_prios)
 
         return {
-            "actor_loss":  actor_loss.item()  if actor_loss is not None else None,
+            "actor_loss":  actor_loss.item() if actor_loss is not None else None,
             "critic1_loss": loss1.item(),
             "critic2_loss": loss2.item()
         }
-
 
 
