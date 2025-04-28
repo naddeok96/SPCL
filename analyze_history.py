@@ -197,6 +197,14 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
     The resulting figure is saved to the output directory.
     """
     num_phases = len(episode['states'])
+
+    min_val, max_val = 0.0, 13.8
+    alpha = 2.0                # >1 → more bins near low end
+    rel   = np.linspace(0, 1, num_bins + 1)
+    edges = min_val + (max_val - min_val) * rel**alpha
+    centers = (edges[:-1] + edges[1:]) / 2
+    widths  = edges[1:] - edges[:-1]
+    half_w = widths / 2
     
     # Create the figure with uniform row height for the top block.
     fig = plt.figure(figsize=(20, num_phases * 3 + 3))
@@ -213,35 +221,36 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
         state = episode['states'][i]
         reward_phase = episode['rewards'][i]
         s_break = breakdown_state(state, num_bins)
-        x = np.arange(num_bins)
-        width = 0.4
-        
+     
         # Column 0: Easy losses.
         ax_easy = fig.add_subplot(gs_top[i, 0])
-        ax_easy.bar(x - width/2, s_break['easy_correct_hist'], width, color='green', label='Correct')
-        ax_easy.bar(x + width/2, s_break['easy_incorrect_hist'], width, color='red', label='Incorrect')
+        ax_easy.bar(centers - half_w/2, s_break['easy_correct_hist'],  half_w, align='center', color='green')
+        ax_easy.bar(centers + half_w/2, s_break['easy_incorrect_hist'], half_w, align='center', color='red')
         if i == 0:
             ax_easy.set_title("Easy Loss Hist", fontsize=10)
         ax_easy.set_ylabel(f"P{i+1}\nR: {reward_phase:.2f}", fontsize=9)
-        ax_easy.tick_params(axis='both', labelsize=8)
+        ax_easy.tick_params(axis='both', labelsize=8, rotation=45)
         if i == 0:
             ax_easy.legend(fontsize=8)
+        ax_easy.set_xticks(edges)
         
         # Column 1: Medium losses.
         ax_med = fig.add_subplot(gs_top[i, 1])
-        ax_med.bar(x - width/2, s_break['medium_correct_hist'], width, color='green')
-        ax_med.bar(x + width/2, s_break['medium_incorrect_hist'], width, color='red')
+        ax_med.bar(centers - half_w/2, s_break['medium_correct_hist'], half_w, color='green')
+        ax_med.bar(centers + half_w/2, s_break['medium_incorrect_hist'], half_w, color='red')
         if i == 0:
             ax_med.set_title("Medium Loss Hist", fontsize=10)
-        ax_med.tick_params(axis='both', labelsize=8)
+        ax_med.tick_params(axis='both', labelsize=8, rotation=45)
+        ax_med.set_xticks(edges)
         
         # Column 2: Hard losses.
         ax_hard = fig.add_subplot(gs_top[i, 2])
-        ax_hard.bar(x - width/2, s_break['hard_correct_hist'], width, color='green')
-        ax_hard.bar(x + width/2, s_break['hard_incorrect_hist'], width, color='red')
+        ax_hard.bar(centers - half_w/2, s_break['hard_correct_hist'], half_w, color='green')
+        ax_hard.bar(centers + half_w/2, s_break['hard_incorrect_hist'], half_w, color='red')
         if i == 0:
             ax_hard.set_title("Hard Loss Hist", fontsize=10)
-        ax_hard.tick_params(axis='both', labelsize=8)
+        ax_hard.tick_params(axis='both', labelsize=8, rotation=45)
+        ax_hard.set_xticks(edges)
         
         # Column 3: State Info.
         ax_info = fig.add_subplot(gs_top[i, 3])
@@ -315,12 +324,12 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze training history from npz file with detailed figures.")
     parser.add_argument("--npz_file", type=str, default="results/curriculum_rl/evolutionary_dataset.npz",
                         help="Path to the npz file saved by generate_dataset.py")
-    parser.add_argument("--num_bins", type=int, default=64,
-                        help="Number of bins used in the loss histograms in the state vector (default 64)")
+    parser.add_argument("--num_bins", type=int, default=16,
+                        help="Number of bins used in the loss histograms in the state vector (default 16)")
     args = parser.parse_args()
     
     # Create output directory "history"
-    output_dir = "history2"
+    output_dir = "history4"
     os.makedirs(output_dir, exist_ok=True)
     
     # Load data.
