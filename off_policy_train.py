@@ -215,7 +215,6 @@ def main():
     config = load_config(args.config)
 
     # config = load_config("config.yaml")
-
     set_seed(42)
     
     # Create a separate directory for checkpoints/plots.
@@ -297,8 +296,8 @@ def main():
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             agent.actor_optimizer,
             mode='min',
-            factor=0.5,
-            patience=1000,
+            factor=0.9,
+            patience=10000,
             verbose=True
         )
         triplet_fn = (
@@ -591,6 +590,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
