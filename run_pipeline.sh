@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # ─── Toggle which steps to run ───────────────────────────────────────────────
-RUN_DATASET=true    # set to false to skip generate_dataset.py
+RUN_DATASET=false   # set to false to skip generate_dataset.py
 RUN_OFFPOLICY=true    # set to false to skip off_policy_train.py
-RUN_on_policy=true     # set to false to skip on_policy_train.py
+RUN_ONPOLICY=true     # set to false to skip on_policy_train.py
 # ────────────────────────────────────────────────────────────────────────────
 
 CONFIG="config.yaml"
@@ -29,22 +29,10 @@ if [ "$RUN_OFFPOLICY" = true ]; then
   echo
 fi
 
-if [ "$RUN_on_policy" = true ]; then
+if [ "$RUN_ONPOLICY" = true ]; then
   echo "=== Step 3/3: On‑policy training ==="
   python on_policy_train.py --config "$CONFIG"
   echo
 fi
 
 echo "Pipeline complete."
-
-
-
-
-
-
-
-
-
-
-
-
