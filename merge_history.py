@@ -4,16 +4,37 @@ import argparse
 import glob
 import numpy as np
 import os
+import re
+import sys
 
 def main():
+
     p = argparse.ArgumentParser()
     p.add_argument("--history_dir", required=True)
     p.add_argument("--output",      required=True,
-                   help="final .npz with full states/actions/rewards/…")
+                help="final .npz with full states/actions/rewards/…")
     args = p.parse_args()
 
-    files = sorted(glob.glob(os.path.join(args.history_dir, "history_gen*.npz")))
-    all_s, all_a, all_r, all_ns, all_d = [],[],[],[],[]
+    output = args.output
+    history_dir= args.history_dir
+
+    # output = "temp/temp.npz"
+    # history_dir = "eval_parts/"
+
+    basename = os.path.basename(output)
+    m = re.match(r".*gen(\d+)\.npz$", basename)
+    if m:
+        pattern = f"eval_gen{m.group(1)}_part*.npz"
+    else:
+        pattern = "eval_gen*_part*.npz"
+
+    # collect all matching parts
+    files = sorted(glob.glob(os.path.join(history_dir, pattern)))
+    if not files:
+        print(f"Error: no files matching '{pattern}' in '{history_dir}'", file=sys.stderr)
+        sys.exit(1)
+
+    all_s, all_a, all_r, all_ns, all_d = [], [], [], [], []
 
     for fn in files:
         d = np.load(fn)
@@ -29,9 +50,9 @@ def main():
     NS= np.concatenate(all_ns)
     D = np.concatenate(all_d)
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    np.savez(args.output, states=S, actions=A, rewards=R, next_states=NS, dones=D)
-    print(f"Final evolutionary dataset saved to {args.output}")
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    np.savez(output, states=S, actions=A, rewards=R, next_states=NS, dones=D)
+    print(f"Final evolutionary dataset saved to {output}")
 
 if __name__ == "__main__":
     main()
