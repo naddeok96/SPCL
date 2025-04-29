@@ -59,6 +59,7 @@ def eval_loader(model, loader, device):
             correct_mask = (preds == labels)
             correct_losses.extend(losses[correct_mask])
             incorrect_losses.extend(losses[~correct_mask])
+
     return correct_losses, incorrect_losses
 
 def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperparams, device):
@@ -166,6 +167,7 @@ def run_curriculum_training(model, easy_loader, medium_loader, hard_loader, hype
             pbar.set_postfix(loss=loss.item())
             if phase_samples >= hyperparams["training_samples"][phase]:
                 break
+            
     # After training, evaluate the model on the validation set.
     acc = evaluate_accuracy(model, val_loader, device)
     return acc
