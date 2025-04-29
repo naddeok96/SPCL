@@ -110,4 +110,5 @@ def evaluate_candidate(env: CurriculumEnv,
         state = nxt
         if done:
             break
+
     return transitions, total_reward
