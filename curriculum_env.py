@@ -52,7 +52,7 @@ class CurriculumEnv:
     def __init__(self, config):
         self.config = config
         self.device = torch.device(config["device"])
-        self.batch_size = config["batch_size"]
+        self.batch_size = config["curriculum"]["student_batch_size"]
         self.num_bins = config["observation"]["num_bins"]
 
         # Fraction bounds
@@ -251,13 +251,20 @@ class CurriculumEnv:
         self.model.train()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=(sum(self.lr_range) / 2.0))
         criterion = torch.nn.CrossEntropyLoss()
-        for imgs, labels in self._warmup_loader:
+        
+        # Calculate number of batches to run (15% of the loader)
+        total_batches = len(self._warmup_loader)
+        max_batches = max(1, int(0.15 * total_batches))
+
+        for batch_idx, (imgs, labels) in enumerate(self._warmup_loader):
             imgs, labels = imgs.to(self.device), labels.to(self.device)
             optimizer.zero_grad()
             outputs = self.model(imgs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            if batch_idx + 1 >= max_batches:
+                break
 
         return self.get_observation()
 
