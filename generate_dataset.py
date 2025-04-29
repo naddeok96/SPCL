@@ -146,6 +146,7 @@ def evaluate_candidate(env, candidate, candidate_dim, num_phases):
         state = next_state
         if done:
             break
+        
     return transitions, aggregated_reward, state, done
 
 def evolutionary_algorithm(env, num_phases, pop_size, generations, top_k, mutation_rate,
