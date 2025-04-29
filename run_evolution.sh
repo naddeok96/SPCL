@@ -9,9 +9,9 @@ source "$VENV_PATH/bin/activate"
 
 # Configuration and directories
 CONFIG="config.yaml"
-GPUS=(1 3)
+GPUS=(0 1)
 RUNS_PER_GPU=1
-POP_SIZE=128
+POP_SIZE=256
 GENERATIONS=16
 
 SAVE_PATH="saved_model_checkpoints"
@@ -24,6 +24,23 @@ PID_FILE="pids.txt"
 # Clean any old PID file and recreate directories
 rm -f "$PID_FILE"
 mkdir -p "$POP_DIR" "$EVAL_DIR" "$HIST_DIR" "$SAVE_PATH" "$LOG_DIR"
+
+# 0) Reserve each GPU with a tiny placeholder and record its PID
+for gpu in "${GPUS[@]}"; do
+  echo "Reserving GPU $gpu with placeholder" | tee -a "$LOG_DIR/placeholder.log"
+
+  nohup bash -c "\
+    CUDA_VISIBLE_DEVICES=$gpu python -c '\
+import torch, time
+torch.cuda.init()
+_ = torch.zeros((1,), device=\"cuda\")
+time.sleep(86400)
+'" \
+    > "$LOG_DIR/placeholder_gpu${gpu}.log" 2>&1 &
+
+  # capture the placeholder’s PID
+  echo $! >> "$PID_FILE"
+done
 
 # 1) Initialize Generation 0 population
 python init_population.py --config "$CONFIG" --output "$POP_DIR/pop_gen_0.npz" 2>&1 | tee "$LOG_DIR/init_population.log"
@@ -75,6 +92,10 @@ done
 
 # 5) Final merge of all per-generation history segments into one dataset
 FINAL_DS="$SAVE_PATH/evolutionary_dataset.npz"
-python merge_history.py --history_dir "$HIST_DIR" --output "$FINAL_DS" 2>&1 | tee -a "$LOG_DIR/merge_history.log"
+python merge_history.py --history_dir "$EVAL_DIR" --output "$FINAL_DS" 2>&1 | tee -a "$LOG_DIR/merge_history.log"
+
+# 6) Cleanup: kill GPU placeholder processes
+echo "Cleaning up GPU placeholders…" | tee -a "$LOG_DIR/run_evolution.log"
+pkill -f "placeholder_gpu" || true
 
 echo "✅ Done. All logs in $LOG_DIR, PIDs in $PID_FILE"
