@@ -1,9 +1,6 @@
 # Compute device for training. Change to "cpu" if no GPU is available.
 device: "cuda:1"
 
-# Global batch size for data loaders (burn‑in, curriculum phases, etc.)
-batch_size: 1024
-
 fractions:
   easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
   easy_upper: 0.95
@@ -20,10 +17,10 @@ model_space:
   dropout_rates: [0.0, 0.2, 0.5]
 
 curriculum:
-  train_samples_max: 180000
+  train_samples_max: 120000
   learning_rate_range: [0.001, 0.01]
   max_phases: 3
-  student_batch_size: 1024
+  student_batch_size: 2048
 
 rl:
   ea_pop_size:      256
