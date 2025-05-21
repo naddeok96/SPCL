@@ -1,5 +1,5 @@
 # Compute device for training. Change to "cpu" if no GPU is available.
-device: "cuda:1"
+device: "cuda:0"
 
 fractions:
   easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
@@ -17,14 +17,14 @@ model_space:
   dropout_rates: [0.0, 0.2, 0.5]
 
 curriculum:
-  train_samples_max: 120000
+  train_samples_max: 30000
   learning_rate_range: [0.001, 0.01]
   max_phases: 3
-  student_batch_size: 2048
+  student_batch_size: 512
 
 rl:
-  ea_pop_size:      256
-  ea_generations:   16
+  ea_pop_size:      12
+  ea_generations:   2
   ea_top_k:         3
   ea_mutation_rate: 0.1
 
@@ -74,7 +74,7 @@ observation:
 paths:
   save_path:                  "results/curriculum_rl"
   data_path:                  "./data"
-  pretrain_path:              "results/curriculum_rl/evolutionary_dataset.npz"
+  pretrain_path:              "results/curriculum_rl/evolutionary_dataset.pt"
   off_policy_actor_model:     "results/off_policy/off_policy_actor_model_final.pth"
   off_policy_critic1_model:   "results/off_policy/off_policy_critic1_model_final.pth"
   off_policy_critic2_model:   "results/off_policy/off_policy_critic2_model_final.pth"
@@ -95,6 +95,10 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
+
+
+
+
 
 
 

@@ -3,153 +3,119 @@ Utility functions for computing loss histograms, constructing observation vector
 and other helper methods.
 """
 
-import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
-def compute_loss_histogram(losses, num_bins):
-    """
-    Compute a normalized histogram for a 1D array of losses,
-    using variable-width bins denser near the low end.
+# --- tweakable max clip and alpha ---
+_MAX_LOSS = 13.8
+_ALPHA    = 2.0
 
-    Args:
-        losses (np.array or torch.Tensor): Array of loss values.
-        num_bins (int): Number of bins to use for the histogram.
+# cache edges per (num_bins, device)
+_edges_cache = {}
 
-    Returns:
-        hist (np.ndarray): A normalized histogram whose bins sum to 1.
-        edges (np.ndarray): Bin-edge locations for plotting.
+def _get_bin_edges(num_bins: int, device: torch.device):
+    key = (num_bins, device)
+    if key not in _edges_cache:
+        rel = torch.linspace(0.0, 1.0, steps=num_bins+1, device=device)
+        _edges_cache[key] = (rel ** _ALPHA) * _MAX_LOSS
+    return _edges_cache[key]
+
+def compute_loss_histogram(losses, num_bins: int, device="cuda:0"):
     """
-    # Convert to NumPy array
-    if torch.is_tensor(losses):
-        losses = losses.cpu().numpy().flatten()
+    Vectorized 1D histogram on GPU via torch.bincount.
+    """
+    device = torch.device(device) if isinstance(device, str) else device
+
+    # to GPU tensor
+    if not torch.is_tensor(losses):
+        losses = torch.tensor(losses, device=device, dtype=torch.float32)
     else:
-        losses = np.array(losses).flatten()
+        losses = losses.to(device).float()
+    losses = losses.flatten().clamp(0.0, _MAX_LOSS)
 
-    # Clip into [0, 13.8] → 13.8 ≈ -ln(1e-6) practical upper bound
-    min_val, max_val = 0.0, 13.8
-    losses_clipped = np.clip(losses, min_val, max_val)
+    # bucket boundaries
+    edges = _get_bin_edges(num_bins, device)
+    boundaries = edges[1:-1]
 
-    # Build variable-width bin edges:
-    # alpha > 1: denser bins at low losses; alpha < 1: denser at high losses
-    alpha = 2.0
-    rel = np.linspace(0, 1, num_bins + 1)
-    edges = min_val + (max_val - min_val) * rel**alpha
+    # bin indices
+    bins = torch.bucketize(losses, boundaries)
 
-    # Compute histogram on those edges
-    hist, _ = np.histogram(losses_clipped, bins=edges)
+    # fast count
+    hist = torch.bincount(bins, minlength=num_bins).to(device, torch.float32)
+    tot  = hist.sum()
+    if tot > 0:
+        hist /= tot
 
-    # Normalize so bins sum to 1
-    hist = hist.astype(float)
-    total = hist.sum()
-    if total > 0:
-        hist /= total
     return hist, edges
 
-
-def compute_dual_loss_histograms(losses_correct, losses_incorrect, num_bins):
+def compute_dual_loss_histograms(losses_correct, losses_incorrect, num_bins: int, device="cuda:0"):
     """
-    Compute histograms for correct and incorrect losses over the same
-    variable-width bins [0,13.8], and normalize so their combined sum is 1.
-
-    Args:
-        losses_correct (np.array or torch.Tensor): Loss values for correct samples.
-        losses_incorrect (np.array or torch.Tensor): Loss values for incorrect samples.
-        num_bins (int): Number of bins to use.
-
-    Returns:
-        norm_correct (np.ndarray): Normalized histogram for correct losses.
-        norm_incorrect (np.ndarray): Normalized histogram for incorrect losses.
-        edges (np.ndarray): Bin-edge locations for plotting.
+    Joint correct/incorrect histograms, vectorized.
     """
-    # Convert to NumPy arrays
-    if torch.is_tensor(losses_correct[0]):
-        lc = np.array([l.cpu().numpy() for l in losses_correct]).flatten()
-    else:
-        lc = np.array(losses_correct).flatten()
-    if torch.is_tensor(losses_incorrect[0]):
-        li =  np.array([l.cpu().numpy() for l in losses_incorrect]).flatten()
-    else:
-        li = np.array(losses_incorrect).flatten()
+    device = torch.device(device) if isinstance(device, str) else device
 
-    # Clip into [0, 13.8]
-    min_val, max_val = 0.0, 13.8
-    lc = np.clip(lc, min_val, max_val)
-    li = np.clip(li, min_val, max_val)
+    # pack into GPU tensors
+    lc = torch.as_tensor(losses_correct or [], device=device, dtype=torch.float32).flatten()
+    li = torch.as_tensor(losses_incorrect or [], device=device, dtype=torch.float32).flatten()
+    lc = lc.clamp(0.0, _MAX_LOSS)
+    li = li.clamp(0.0, _MAX_LOSS)
 
-    # Build variable-width bin edges (denser at low end)
-    alpha = 2.0
-    rel = np.linspace(0, 1, num_bins + 1)
-    edges = min_val + (max_val - min_val) * rel**alpha
+    edges = _get_bin_edges(num_bins, device)
+    boundaries = edges[1:-1]
 
-    # Compute histograms
-    hist_correct, _   = np.histogram(lc, bins=edges)
-    hist_incorrect, _ = np.histogram(li, bins=edges)
+    bins_c = torch.bucketize(lc, boundaries)
+    bins_i = torch.bucketize(li, boundaries)
 
-    # Normalize combined
-    combined = hist_correct + hist_incorrect
-    total = combined.sum()
-    if total > 0:
-        norm_correct   = hist_correct   / total
-        norm_incorrect = hist_incorrect / total
-    else:
-        norm_correct   = np.zeros_like(hist_correct,   dtype=float)
-        norm_incorrect = np.zeros_like(hist_incorrect, dtype=float)
+    hist_c = torch.bincount(bins_c, minlength=num_bins).to(device, torch.float32)
+    hist_i = torch.bincount(bins_i, minlength=num_bins).to(device, torch.float32)
 
-    return norm_correct, norm_incorrect
+    total = hist_c + hist_i
+    tot_sum = total.sum()
+    if tot_sum > 0:
+        hist_c /= tot_sum
+        hist_i /= tot_sum
 
-def construct_observation(easy_correct, easy_incorrect,
-                          medium_correct, medium_incorrect,
-                          hard_correct, hard_incorrect,
-                          easy_count, medium_count, hard_count, num_bins):
-    """
-    Construct the observation vector by concatenating six binned normalized loss vectors
-    (for correct and incorrect samples for the easy, medium, and hard datasets) and the
-    relative dataset sizes.
-    
-    Args:
-        easy_correct, easy_incorrect, medium_correct, medium_incorrect,
-        hard_correct, hard_incorrect (list or np.array): Lists/arrays of loss values.
-        
-        easy_count, medium_count, hard_count (int): The sample counts for each dataset.
-        
-        num_bins (int): Number of bins for each loss histogram.
-        
-    Returns:
-        observation (np.ndarray): A fixed-length vector (6 * num_bins + 3 features).
-    """
-    ec_hist, ei_hist = compute_dual_loss_histograms(easy_correct, easy_incorrect, num_bins)
-    mc_hist, mi_hist = compute_dual_loss_histograms(medium_correct, medium_incorrect, num_bins)
-    hc_hist, hi_hist = compute_dual_loss_histograms(hard_correct, hard_incorrect, num_bins)
-
-    
-    # Normalize the dataset sizes so they sum to 1.
-    total_count = easy_count + medium_count + hard_count
-    rel_sizes = np.array([easy_count, medium_count, hard_count], dtype=float) / total_count
-    
-    observation = np.concatenate([ec_hist, ei_hist, mc_hist, mi_hist, hc_hist, hi_hist, rel_sizes])
-    return observation
+    return hist_c, hist_i, edges
 
 def plot_histogram(hist, edges=None, title=None, filename=None):
+    plt.figure()
+    vals = hist.cpu().tolist()
+    if edges is not None:
+        e = edges.cpu().tolist()
+        centers = [(e[i]+e[i+1])/2 for i in range(len(e)-1)]
+        widths  = [(e[i+1]-e[i])    for i in range(len(e)-1)]
+        plt.bar(centers, vals, width=widths, align="center")
+        plt.xticks(e, rotation=45)
+    else:
+        plt.bar(range(len(vals)), vals)
+    if title:    plt.title(title)
+    plt.xlabel("Loss bin"); plt.ylabel("Freq")
+    plt.tight_layout()
+    if filename: plt.savefig(filename)
+    plt.close()
+def plot_histogram(hist, edges=None, title=None, filename=None):
     """
-    Plot a normalized histogram with optional variable-width bins and fixed ticks.
+    Plot a normalized histogram (Tensor) with optional variable-width bins.
 
     Args:
-        hist (np.ndarray): Histogram bin counts or frequencies.
-        edges (np.ndarray or None): If provided, use these as bin edges; otherwise assume uniform bins.
+        hist (torch.Tensor): Length-N tensor of frequencies.
+        edges (torch.Tensor or None): Length-(N+1) tensor of bin edges.
         title (str or None): Plot title.
-        filename (str or None): If provided, save figure to this path.
+        filename (str or None): If given, save to this path.
     """
     plt.figure()
+    hist_vals = hist.cpu().tolist()
+    
     if edges is not None:
-        # Compute bin centers and widths
-        centers = (edges[:-1] + edges[1:]) / 2
-        widths = edges[1:] - edges[:-1]
-        plt.bar(centers, hist, width=widths, align='center')
-        # Set ticks at every bin edge
-        plt.xticks(edges, rotation=45)
+        edges_cpu = edges.cpu()
+        centers = ((edges_cpu[:-1] + edges_cpu[1:]) / 2).tolist()
+        widths  = (edges_cpu[1:] - edges_cpu[:-1]).tolist()
+        plt.bar(centers, hist_vals, width=widths, align='center')
+        plt.xticks(edges_cpu.tolist(), rotation=45)
     else:
-        plt.bar(np.arange(len(hist)), hist)
+        positions = list(range(len(hist_vals)))
+        plt.bar(positions, hist_vals)
+
     if title:
         plt.title(title)
     plt.xlabel("Loss bins")
@@ -158,6 +124,10 @@ def plot_histogram(hist, edges=None, title=None, filename=None):
     if filename:
         plt.savefig(filename)
     plt.close()
+
+
+
+
 
 
 

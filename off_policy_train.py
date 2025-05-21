@@ -12,7 +12,6 @@ are saved to a separate checkpoint directory.
 import os
 import yaml
 import torch
-import numpy as np
 import random
 import argparse
 import torch.nn as nn
@@ -26,9 +25,9 @@ from rl_agent import DDPGAgent
 from replay_buffer import ReplayBuffer, PERBuffer
 from curriculum_env import CurriculumEnv
 
-def set_seed(seed):
+def set_seed(seed: int):
+    """Set random seeds for reproducibility."""
     random.seed(seed)
-    np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -54,15 +53,18 @@ def breakdown_state(state, num_bins):
       - Indices 6*num_bins+3:6*num_bins+5     : Extra state features (2 values)
     Total length = 6*num_bins + 5.
     """
+    if not torch.is_tensor(state):
+        state = torch.tensor(state, dtype=torch.float32)
+        
     breakdown = {}
-    breakdown['easy_correct_hist'] = state[0:num_bins]
-    breakdown['easy_incorrect_hist'] = state[num_bins:2*num_bins]
-    breakdown['medium_correct_hist'] = state[2*num_bins:3*num_bins]
-    breakdown['medium_incorrect_hist'] = state[3*num_bins:4*num_bins]
-    breakdown['hard_correct_hist'] = state[4*num_bins:5*num_bins]
-    breakdown['hard_incorrect_hist'] = state[5*num_bins:6*num_bins]
-    breakdown['relative_sizes'] = state[6*num_bins:6*num_bins+3]
-    breakdown['extra'] = state[6*num_bins+3:6*num_bins+5]
+    breakdown['easy_correct_hist'] = state[0:num_bins].tolist()
+    breakdown['easy_incorrect_hist'] = state[num_bins:2*num_bins].tolist()
+    breakdown['medium_correct_hist'] = state[2*num_bins:3*num_bins].tolist()
+    breakdown['medium_incorrect_hist'] = state[3*num_bins:4*num_bins].tolist()
+    breakdown['hard_correct_hist'] = state[4*num_bins:5*num_bins].tolist()
+    breakdown['hard_incorrect_hist'] = state[5*num_bins:6*num_bins].tolist()
+    breakdown['relative_sizes'] = state[6*num_bins:6*num_bins+3].tolist()
+    breakdown['extra'] = state[6*num_bins+3:6*num_bins+5].tolist()
     return breakdown
 
 def breakdown_action(action):
@@ -72,10 +74,13 @@ def breakdown_action(action):
       - Mixing ratios for (Easy, Medium, Hard): action[1:4]
       - Sample usage fraction: action[4]
     """
+    if not torch.is_tensor(action):
+        action = torch.tensor(action, dtype=torch.float32)
+        
     breakdown = {}
-    breakdown['learning_rate'] = action[0]
-    breakdown['mixing_ratios'] = action[1:4]
-    breakdown['sample_usage_fraction'] = action[4]
+    breakdown['learning_rate'] = action[0].tolist()
+    breakdown['mixing_ratios'] = action[1:4].tolist()
+    breakdown['sample_usage_fraction'] = action[4].tolist()
     return breakdown
 
 def plot_episode_figure(episode, group_name, num_bins, output_dir):
@@ -94,7 +99,10 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
             4. Reward evolution (with the last phase reward divided by 10).
     The resulting figure is saved to the output directory.
     """
-    num_phases = len(episode['states'])
+    states  = episode['states']
+    actions = episode['actions']
+    rewards = episode['rewards']
+    num_phases = len(states)
     
     fig = plt.figure(figsize=(20, num_phases * 3 + 3))
     
@@ -106,101 +114,108 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
     
     # TOP BLOCK: For each phase, plot state breakdown.
     for i in range(num_phases):
-        state = episode['states'][i]
-        reward_phase = episode['rewards'][i]
-        s_break = breakdown_state(state, num_bins)
-        x = np.arange(num_bins)
-        width = 0.4
+        s = states[i]
+        r = rewards[i]
+        sb = breakdown_state(s, num_bins)
         
-        # Column 0: Easy losses.
-        ax_easy = fig.add_subplot(gs_top[i, 0])
-        ax_easy.bar(x - width/2, s_break['easy_correct_hist'], width, color='green', label='Correct')
-        ax_easy.bar(x + width/2, s_break['easy_incorrect_hist'], width, color='red', label='Incorrect')
-        if i == 0:
-            ax_easy.set_title("Easy Loss Hist", fontsize=10)
-        ax_easy.set_ylabel(f"P{i+1}\nR: {reward_phase:.2f}", fontsize=9)
-        ax_easy.tick_params(axis='both', labelsize=8)
-        if i == 0:
-            ax_easy.legend(fontsize=8)
+        x = list(range(num_bins))
+        w = 0.4
+        x_left  = [xi - w/2 for xi in x]
+        x_right = [xi + w/2 for xi in x]
         
-        # Column 1: Medium losses.
-        ax_med = fig.add_subplot(gs_top[i, 1])
-        ax_med.bar(x - width/2, s_break['medium_correct_hist'], width, color='green')
-        ax_med.bar(x + width/2, s_break['medium_incorrect_hist'], width, color='red')
+        # Easy losses
+        ax0 = fig.add_subplot(gs_top[i,0])
+        ax0.bar(x_left,  sb['easy_correct_hist'],   w, label='Correct')
+        ax0.bar(x_right, sb['easy_incorrect_hist'], w, color='red', label='Incorrect')
         if i == 0:
-            ax_med.set_title("Medium Loss Hist", fontsize=10)
-        ax_med.tick_params(axis='both', labelsize=8)
-        
-        # Column 2: Hard losses.
-        ax_hard = fig.add_subplot(gs_top[i, 2])
-        ax_hard.bar(x - width/2, s_break['hard_correct_hist'], width, color='green')
-        ax_hard.bar(x + width/2, s_break['hard_incorrect_hist'], width, color='red')
-        if i == 0:
-            ax_hard.set_title("Hard Loss Hist", fontsize=10)
-        ax_hard.tick_params(axis='both', labelsize=8)
-        
-        # Column 3: State Info.
-        ax_info = fig.add_subplot(gs_top[i, 3])
-        state_info = np.concatenate([s_break['relative_sizes'], s_break['extra']])
-        colors_info = ['blue', 'orange', 'purple', 'cyan', 'magenta']
-        ax_info.bar(np.arange(5), state_info, color=colors_info)
-        ax_info.set_xticks(np.arange(5))
-        ax_info.set_xticklabels(['Easy', 'Med', 'Hard', 'PhaseRatio', 'AvailRatio'], 
-                                rotation=45, fontsize=8)
-        if i == 0:
-            ax_info.set_title("State Info", fontsize=10)
-        ax_info.tick_params(axis='both', labelsize=8)
-    
-    # BOTTOM BLOCK: Aggregated evolution across phases.
-    phases = np.arange(1, num_phases + 1)
-    learning_rates = [episode['actions'][i][0] for i in range(num_phases)]
-    sample_usage = [episode['actions'][i][4] for i in range(num_phases)]
-    mixing_ratios = np.array([episode['actions'][i][1:4] for i in range(num_phases)])
-    rewards_phase = [episode['rewards'][i] for i in range(num_phases)]
-    adjusted_rewards = np.array(rewards_phase, dtype=float)
-    if len(adjusted_rewards) > 0:
-        adjusted_rewards[-1] = adjusted_rewards[-1] / 10.0
+            ax0.set_title("Easy Loss Hist", fontsize=10)
+            ax0.legend(fontsize=8)
+        ax0.set_ylabel(f"P{i+1}\nR:{r:.2f}", fontsize=9)
+        ax0.tick_params(labelsize=8)
 
-    ax_lr = fig.add_subplot(gs_bot[0, 0])
-    ax_lr.plot(phases, learning_rates, marker='o', linestyle='-', color='blue')
+        # Medium losses
+        ax1 = fig.add_subplot(gs_top[i,1])
+        ax1.bar(x_left,  sb['medium_correct_hist'],   w)
+        ax1.bar(x_right, sb['medium_incorrect_hist'], w, color='red')
+        if i == 0:
+            ax1.set_title("Medium Loss Hist", fontsize=10)
+        ax1.tick_params(labelsize=8)
+
+        # Hard losses
+        ax2 = fig.add_subplot(gs_top[i,2])
+        ax2.bar(x_left,  sb['hard_correct_hist'],   w)
+        ax2.bar(x_right, sb['hard_incorrect_hist'], w, color='red')
+        if i == 0:
+            ax2.set_title("Hard Loss Hist", fontsize=10)
+        ax2.tick_params(labelsize=8)
+
+        # State info
+        ax3 = fig.add_subplot(gs_top[i,3])
+        info = sb['relative_sizes'] + sb['extra']
+        ax3.bar(list(range(5)), info,
+                color=['blue','orange','purple','cyan','magenta'])
+        ax3.set_xticks(list(range(5)))
+        ax3.set_xticklabels(['Easy','Med','Hard','PhaseRatio','AvailRatio'],
+                            rotation=45, fontsize=8)
+        if i == 0:
+            ax3.set_title("State Info", fontsize=10)
+        ax3.tick_params(labelsize=8)
+
+    # Bottom block: aggregated view
+    phases      = list(range(1, num_phases+1))
+    lrs         = [actions[i][0] for i in range(num_phases)]
+    usage       = [actions[i][4] for i in range(num_phases)]
+    mixratios   = [actions[i][1:4] for i in range(num_phases)]
+    rews        = [float(r) for r in rewards]
+    if rews:
+        rews[-1] = rews[-1] / 10.0
+
+    # Learning rate
+    ax_lr = fig.add_subplot(gs_bot[0,0])
+    ax_lr.plot(phases, lrs, marker='o')
     ax_lr.set_title("Learning Rate", fontsize=10)
     ax_lr.set_xlabel("Phase", fontsize=9)
     ax_lr.set_ylabel("LR", fontsize=9)
     ax_lr.set_xticks(phases)
-    
-    ax_usage = fig.add_subplot(gs_bot[0, 1])
-    ax_usage.plot(phases, sample_usage, marker='o', linestyle='-', color='orange')
-    ax_usage.set_title("Sample Usage", fontsize=10)
-    ax_usage.set_xlabel("Phase", fontsize=9)
-    ax_usage.set_ylabel("Usage", fontsize=9)
-    ax_usage.set_xticks(phases)
-    
-    ax_mix = fig.add_subplot(gs_bot[0, 2])
-    bar_width = 0.6
-    for i in range(num_phases):
-        ratio = mixing_ratios[i]
-        ax_mix.bar(i, ratio[0], color='green', width=bar_width, label='Easy' if i==0 else "")
-        ax_mix.bar(i, ratio[1], bottom=ratio[0], color='orange', width=bar_width, label='Med' if i==0 else "")
-        ax_mix.bar(i, ratio[2], bottom=ratio[0]+ratio[1], color='red', width=bar_width, label='Hard' if i==0 else "")
-    ax_mix.set_xticks(np.arange(num_phases))
-    ax_mix.set_xticklabels([f"P{p}" for p in phases])
-    ax_mix.set_title("Mixing Ratios", fontsize=10)
-    ax_mix.set_xlabel("Phase", fontsize=9)
-    ax_mix.set_ylabel("Ratio", fontsize=9)
-    ax_mix.legend(fontsize=8)
-    
-    ax_reward = fig.add_subplot(gs_bot[0, 3])
-    ax_reward.plot(phases, adjusted_rewards, marker='o', linestyle='-', color='black')
-    ax_reward.set_title("Reward", fontsize=10)
-    ax_reward.set_xlabel("Phase", fontsize=9)
-    ax_reward.set_ylabel("Reward", fontsize=9)
-    ax_reward.set_xticks(phases)
-    
+
+    # Sample usage
+    ax_us = fig.add_subplot(gs_bot[0,1])
+    ax_us.plot(phases, usage, marker='o')
+    ax_us.set_title("Sample Usage", fontsize=10)
+    ax_us.set_xlabel("Phase", fontsize=9)
+    ax_us.set_ylabel("Usage", fontsize=9)
+    ax_us.set_xticks(phases)
+
+    # Mixing ratios
+    ax_mx = fig.add_subplot(gs_bot[0,2])
+    bar_w = 0.6
+    for idx, mr in enumerate(mixratios):
+        btm = 0.0
+        ax_mx.bar(idx, mr[0], bottom=btm, width=bar_w, label='Easy' if idx==0 else "")
+        btm += mr[0]
+        ax_mx.bar(idx, mr[1], bottom=btm, width=bar_w, label='Med' if idx==0 else "")
+        btm += mr[1]
+        ax_mx.bar(idx, mr[2], bottom=btm, width=bar_w, label='Hard' if idx==0 else "")
+    ax_mx.set_xticks(list(range(num_phases)))
+    ax_mx.set_xticklabels([f"P{p}" for p in phases])
+    ax_mx.set_title("Mixing Ratios", fontsize=10)
+    ax_mx.set_xlabel("Phase", fontsize=9)
+    ax_mx.set_ylabel("Ratio", fontsize=9)
+    ax_mx.legend(fontsize=8)
+
+    # Reward evolution
+    ax_rw = fig.add_subplot(gs_bot[0,3])
+    ax_rw.plot(phases, rews, marker='o')
+    ax_rw.set_title("Reward", fontsize=10)
+    ax_rw.set_xlabel("Phase", fontsize=9)
+    ax_rw.set_ylabel("Reward", fontsize=9)
+    ax_rw.set_xticks(phases)
+
     plt.tight_layout()
-    fig_filename = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed.png")
-    plt.savefig(fig_filename)
-    plt.close()
-    print(f"Saved detailed figure for {group_name} episode {episode['index']} to {fig_filename}")
+    fname = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed.png")
+    plt.savefig(fname)
+    plt.close(fig)
+    print(f"Saved detailed figure for {group_name} episode {episode['index']} to {fname}")
 
 # ----- Main Training and Evaluation -----
 
@@ -221,19 +236,20 @@ def main():
     results_dir = os.path.join("results", "off_policy")
     os.makedirs(results_dir, exist_ok=True)
     
-    # Load the evolutionary dataset.
+    # Load dataset (must be a .pt saved via torch.save)
     dataset_path = config["paths"]["pretrain_path"]
-    data = np.load(dataset_path)
-    states = data["states"]
-    actions = data["actions"]
-    rewards = data["rewards"]
+    data = torch.load(dataset_path, map_location="cpu")
+    states      = data["states"]
+    actions     = data["actions"]
+    rewards     = data["rewards"]
     next_states = data["next_states"]
-    dones = data["dones"]
+    dones       = data["dones"]
 
     # Populate the replay buffer.
     if config["rl"].get("per_enabled", False):
         replay_buffer = PERBuffer(
             config["rl"]["buffer_size"],
+            config["device"],
             alpha=config["rl"].get("per_alpha", 0.6),
             beta=config["rl"].get("per_beta", 0.4),
             epsilon=config["rl"].get("per_epsilon", 1e-6),
@@ -255,43 +271,27 @@ def main():
     agent = DDPGAgent(obs_dim, action_dim, config)
 
     probe_batch_size = 256
-    probe_indices    = np.random.choice(len(states), size=probe_batch_size, replace=False)
-    variance_states  = states[probe_indices]
-    variance_states_tensor = torch.FloatTensor(variance_states).to(agent.device)
+    perm = torch.randperm(len(states))
+    idxs = perm[:probe_batch_size]
+    variance_states_tensor = states[idxs].to(agent.device).float()
     
+    # Behavioral cloning pretrain
     if config["rl"].get("use_behavioral_cloning", False):
-        print("Starting BC pretrain with real EA data…")
+        print("Starting BC pretrain on top 10% reward transitions…")
 
         # 1) Load your saved EA transitions
-        ea = np.load(dataset_path)
+        ea    = torch.load(dataset_path, map_location="cpu")
         ea_states  = ea["states"]   # shape (N, state_dim)
         ea_actions = ea["actions"]  # shape (N, action_dim)
         ea_rewards = ea["rewards"]  # shape (N,)
 
-        # 2) Precompute sorted indices by reward
-        sorted_idx = np.argsort(ea_rewards)  # ascending
-        N = len(ea_rewards)
+        # 2) Compute threshold for top 25%
+        threshold = torch.quantile(ea_rewards, 0.75)
+        pos_pool = (ea_rewards >= threshold).nonzero(as_tuple=True)[0]
+        if pos_pool.numel() == 0:
+            raise ValueError(f"No transitions above the 90th percentile (thr={threshold:.4f})")
 
-        # 3) Pick positives/negatives based on config
-        sel = config["rl"].get("bc_trajectory_selection", "top_k")
-        if sel == "top_k":
-            k = config["rl"].get("bc_top_k", config["rl"]["batch_size"])
-            pos_pool = sorted_idx[-k:]     # ← rename to pos_pool
-            neg_pool = sorted_idx[:k]      # ← rename to neg_pool
-        elif sel == "threshold":
-            thr = config["rl"].get("bc_reward_threshold", np.median(ea_rewards))
-            pos_pool = np.where(ea_rewards >= thr)[0]
-            neg_pool = np.where(ea_rewards <  thr)[0]
-        elif sel == "percentile":
-            p = config["rl"].get("bc_percentile", 80)
-            high_thr = np.percentile(ea_rewards, p)
-            low_thr  = np.percentile(ea_rewards, 100 - p)
-            pos_pool = np.where(ea_rewards >= high_thr)[0]
-            neg_pool = np.where(ea_rewards <= low_thr)[0]
-        else:
-            raise ValueError(f"Unknown bc_trajectory_selection: {sel}")
-
-        # 4) Loss function & scheduler
+        # 3) Loss function & scheduler (pure BC)
         bc_loss_fn = nn.SmoothL1Loss()
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             agent.actor_optimizer,
@@ -300,35 +300,22 @@ def main():
             patience=10000,
             verbose=True
         )
-        triplet_fn = (
-            nn.TripletMarginLoss(margin=config["rl"].get("triplet_margin", 0.2))
-            if config["rl"].get("use_triplet_loss", False) else None
-        )
 
-        # 5) BC loop
+        # 4) BC loop
         iters = config["rl"].get("pretrain_bc_iters", 1000)
         batch = config["rl"]["batch_size"]
         bc_losses = []
         for _ in trange(iters, desc="BC Pretrain"):
-            # --- sample anchor transitions uniformly from EA ---
-            anc_idx = np.random.randint(0, N, size=batch)
-            s_anc   = torch.FloatTensor(ea_states[anc_idx]).to(agent.device)
-            a_anc   = torch.FloatTensor(ea_actions[anc_idx]).to(agent.device)
+            # sample _batch_ indices uniformly from the top‐10% pool
+            idx_batch = pos_pool[torch.randint(0, len(pos_pool), (batch,))]
+            s_batch   = ea_states[idx_batch].to(agent.device).float()
+            a_batch   = ea_actions[idx_batch].to(agent.device).float()
 
-            # --- sample positives & negatives from your pools ---
-            if triplet_fn:
-                pos_batch = np.random.choice(pos_pool, size=batch, replace=True)
-                neg_batch = np.random.choice(neg_pool, size=batch, replace=True)
-                a_pos = torch.FloatTensor(ea_actions[pos_batch]).to(agent.device)
-                a_neg = torch.FloatTensor(ea_actions[neg_batch]).to(agent.device)
+            # forward & loss
+            pred = agent.actor(s_batch)
+            loss = bc_loss_fn(pred, a_batch)
 
-            # --- forward & losses ---
-            pred = agent.actor(s_anc)
-            loss = bc_loss_fn(pred, a_anc)
-            if triplet_fn:
-                loss = loss + triplet_fn(pred, a_pos, a_neg)
-
-            # --- backprop actor only ---
+            # update actor
             agent.actor_optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(agent.actor.parameters(), max_norm=1.0)
@@ -337,11 +324,11 @@ def main():
 
             bc_losses.append(loss.item())
 
+        # 5) Save actor and plot BC loss progression
         bc_actor_path = os.path.join(results_dir, "actor_after_bc.pth")
         torch.save(agent.actor.state_dict(), bc_actor_path)
-        print(f"Saved actor (post‑BC) → {bc_actor_path}")
+        print(f"Saved actor (post-BC) → {bc_actor_path}")
 
-        # 1) BC loss progression
         plt.figure()
         plt.plot(bc_losses)
         plt.title("Behavior Cloning Loss Progression")
@@ -351,23 +338,25 @@ def main():
         plt.savefig(os.path.join(results_dir, "bc_loss_progression.png"))
         plt.close()
 
-        # 2) Mixing‐ratio distributions: EA vs. actor predictions
-        #    ea_actions is your loaded array; need to compute actor's outputs on same states
-        ea_tensor = torch.FloatTensor(ea_states).to(agent.device)
+        # 6) Mixing‐ratio distributions: EA vs. actor predictions
+        ea_tensor = ea_states.to(agent.device).float()
         with torch.no_grad():
-            pred_actions = agent.actor(ea_tensor).cpu().numpy()
+            pred_actions = agent.actor(ea_tensor).cpu()
 
         for idx, name in zip([1,2,3], ["Easy","Med","Hard"]):
             plt.figure()
-            plt.hist(ea_actions[:, idx], bins=30, alpha=0.5, label="EA "+name, density=True)
-            plt.hist(pred_actions[:, idx], bins=30, alpha=0.5, label="Actor "+name, density=True)
+            plt.hist(ea_actions[:, idx].cpu().numpy(), bins=30, alpha=0.5,
+                    label="EA "+name, density=True)
+            plt.hist(pred_actions[:, idx].numpy(), bins=30, alpha=0.5,
+                    label="Actor "+name, density=True)
             plt.title(f"Mixing Ratio – {name}")
             plt.xlabel("Ratio Value")
             plt.ylabel("Density")
             plt.legend()
             plt.savefig(os.path.join(results_dir, f"bc_mixratio_{name.lower()}.png"))
             plt.close()
-
+            
+            
     if config["rl"].get("pretrain_critic_offpolicy", True):
         print("Pretraining critic off‑policy…")
         pre_iters = config["rl"].get("pretrain_critic_iters", 10000)
@@ -425,9 +414,9 @@ def main():
                 critic1_losses.append(metrics["critic1_loss"])
                 critic2_losses.append(metrics["critic2_loss"])
         with torch.no_grad():
-            pred_actions = agent.actor(variance_states_tensor).cpu().numpy()  # (256,5)
-        var = np.var(pred_actions, axis=0)  # length‑5 vector
-        action_var_history.append(var)
+            pred_actions = agent.actor(variance_states_tensor).cpu() # (256,5)
+        var = torch.var(pred_actions, dim=0, unbiased=False)  # length‑5 vector
+        action_var_history.append(var.tolist())
         update_steps.append(update)
         
         # Every checkpoint_interval (5% of training), run a full evaluation episode
@@ -452,9 +441,9 @@ def main():
             # Build an evaluation episode dictionary.
             eval_episode = {
                 "index": update,
-                "states": np.array(eval_states),
-                "actions": np.array(eval_actions),
-                "rewards": np.array(eval_rewards),
+                "states": eval_states,
+                "actions": eval_actions,
+                "rewards": eval_rewards,
                 "total_reward": total_reward,
                 "episode_length": len(eval_states)
             }
@@ -501,13 +490,13 @@ def main():
             print(f"Saved critic2 → {crit2_ckpt}")
 
             # plot action‐component variances
-            action_var_array = np.vstack(action_var_history)  # shape (steps,5)
+            action_var_array = torch.tensor(action_var_history)  # shape (steps,5)
             names = ["learning_rate","mix_easy","mix_med","mix_hard","sample_usage"]
 
             # 5‐panel subplot, one row per action component
             fig, axs = plt.subplots(nrows=5, ncols=1, figsize=(8,12), sharex=True)
             for idx, name in enumerate(names):
-                axs[idx].plot(update_steps, action_var_array[:,idx])
+                axs[idx].plot(update_steps, action_var_array[:,idx].numpy())
                 axs[idx].set_ylabel("Var")
                 axs[idx].set_title(name)
                 axs[idx].grid(True)
@@ -536,9 +525,9 @@ def main():
     
     eval_episode = {
         "index": num_updates,
-        "states": np.array(eval_states),
-        "actions": np.array(eval_actions),
-        "rewards": np.array(eval_rewards),
+        "states": eval_states,
+        "actions": eval_actions,
+        "rewards": eval_rewards,
         "total_reward": total_reward,
         "episode_length": len(eval_states)
     }
@@ -590,6 +579,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

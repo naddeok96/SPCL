@@ -4,19 +4,11 @@ This module contains a simple burn-in phase for loss collection and a curriculum
 that uses hyperparameters provided by the RL agent.
 """
 
-import random
 import torch
 import torch.optim as optim
 import torch.nn as nn
-import torchvision
-from torch.utils.data import DataLoader, ConcatDataset, Subset
 from tqdm import tqdm
-import numpy as np
-
-from utils import construct_observation
-
-# Use parts of the original experiment code if desired.
-# Here, we assume a SimpleMLP model and standard datasets (e.g., MNIST).
+from utils import _get_bin_edges, _MAX_LOSS
 
 class SimpleMLP(nn.Module):
     def __init__(self):
@@ -32,35 +24,55 @@ class SimpleMLP(nn.Module):
         x = self.fc(x)
         return x
 
-def eval_loader(model, loader, device):
+def eval_loader(model, loader, device, num_bins):
     """
-    Runs a burn-in phase on a given loader to compute per-sample losses and accuracies.
-    
-    Args:
-        model (nn.Module): The model to evaluate.
-        loader (DataLoader): DataLoader for a given dataset split.
-        device (torch.device): Device to perform computation.
-        
-    Returns:
-        correct_losses (list): Losses for correctly predicted samples.
-        incorrect_losses (list): Losses for incorrectly predicted samples.
+    Compute per-sample correct/incorrect loss histograms on GPU.
+    Returns (hist_correct, hist_incorrect), each length num_bins.
     """
     model.eval()
-    ce_loss = nn.CrossEntropyLoss(reduction='none')
-    correct_losses = []
-    incorrect_losses = []
-    
-    with torch.no_grad():
-        for imgs, labels in tqdm(loader, desc="Processing batches", disable=True):
-            imgs, labels = imgs.to(device), labels.to(device)
-            outputs = model(imgs)
-            losses = ce_loss(outputs, labels)
-            preds = outputs.argmax(dim=1)
-            correct_mask = (preds == labels)
-            correct_losses.extend(losses[correct_mask])
-            incorrect_losses.extend(losses[~correct_mask])
+    device = torch.device(device) if isinstance(device, str) else device
 
-    return correct_losses, incorrect_losses
+    hist_c = torch.zeros(num_bins, device=device)
+    hist_i = torch.zeros(num_bins, device=device)
+
+    # shared binning
+    edges      = _get_bin_edges(num_bins, device)
+    boundaries = edges[1:-1]
+
+    ce_loss = nn.CrossEntropyLoss(reduction="none")
+
+    max_num_batches = int(len(loader) * 0.5)
+    with torch.no_grad():
+        for batch_num, (imgs, labels) in enumerate(loader):
+            imgs   = imgs.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            outputs = model(imgs)
+            losses  = ce_loss(outputs, labels)
+            preds   = outputs.argmax(dim=1)
+
+            # split correct vs incorrect
+            lc = losses[preds == labels].clamp(0.0, _MAX_LOSS).flatten()
+            li = losses[preds != labels].clamp(0.0, _MAX_LOSS).flatten()
+
+            # bucketize + count
+            bc = torch.bucketize(lc, boundaries)
+            bi = torch.bucketize(li, boundaries)
+
+            hist_c += torch.bincount(bc, minlength=num_bins).to(device, torch.float32)
+            hist_i += torch.bincount(bi, minlength=num_bins).to(device, torch.float32)
+            
+            if batch_num > max_num_batches:
+                break
+            
+
+    total = hist_c + hist_i
+    S = total.sum()
+    if S > 0:
+        hist_c /= S
+        hist_i /= S
+
+    return hist_c, hist_i
 
 def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperparams, device):
     """
@@ -99,9 +111,9 @@ def run_phase_training(model, easy_loader, medium_loader, hard_loader, hyperpara
     optimizer = optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
     model.train()
     phase_samples = 0
-    pbar = tqdm(mixed_loader, desc="Phase Training", disable=True)
+    pbar = tqdm(mixed_loader, desc="Phase Training")
     for imgs, labels in pbar:
-        imgs, labels = imgs.to(device), labels.to(device)
+        imgs, labels = imgs.to(device, non_blocking=True), labels.to(device)
         optimizer.zero_grad()
         outputs = model(imgs)
         loss = criterion(outputs, labels)
@@ -157,7 +169,7 @@ def run_curriculum_training(model, easy_loader, medium_loader, hard_loader, hype
         phase_samples = 0
         pbar = tqdm(mixed_loader, desc=f"Curriculum Phase {phase+1}")
         for imgs, labels in pbar:
-            imgs, labels = imgs.to(device), labels.to(device)
+            imgs, labels = imgs.to(device, non_blocking=True), labels.to(device)
             optimizer.zero_grad()
             outputs = model(imgs)
             loss = criterion(outputs, labels)
@@ -189,7 +201,7 @@ def get_mixed_loader(easy_ds, medium_ds, hard_ds, mixture, num_samples, batch_si
     from torch.utils.data import ConcatDataset, WeightedRandomSampler, DataLoader
     concat_ds = ConcatDataset([easy_ds, medium_ds, hard_ds])
     weights = [mixture[0]] * len(easy_ds) + [mixture[1]] * len(medium_ds) + [mixture[2]] * len(hard_ds)
-    sampler = WeightedRandomSampler(weights, num_samples=num_samples, replacement=True)
+    sampler = WeightedRandomSampler(weights, num_samples=max(num_samples, 100), replacement=True)
     loader = DataLoader(concat_ds, batch_size=batch_size, sampler=sampler)
     return loader
 
@@ -210,12 +222,16 @@ def evaluate_accuracy(model, loader, device):
     total = 0
     with torch.no_grad():
         for imgs, labels in loader:
-            imgs, labels = imgs.to(device), labels.to(device)
+            imgs, labels = imgs.to(device, non_blocking=True), labels.to(device)
             outputs = model(imgs)
             preds = outputs.argmax(dim=1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
     return 100.0 * correct / total
+
+
+
+
 
 
 

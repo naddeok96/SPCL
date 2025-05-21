@@ -2,7 +2,7 @@
 """
 analyze_history.py
 
-This script loads an NPZ file (saved by generate_dataset.py) that contains training history 
+This script loads a PyTorch .pt file (saved by generate_dataset.py) that contains training history 
 (transitions from an evolutionary dataset), groups transitions into episodes using the 
 done flag as an episode terminator, and then analyzes the episodes. The script:
   - Computes the total reward per episode.
@@ -21,28 +21,29 @@ done flag as an episode terminator, and then analyzes the episodes. The script:
             3. Mixing Ratios as a stacked bar plot (one bar per phase).
             4. Reward evolution (with the last phase reward divided by 10).
   - Also plots and saves a histogram of all episode total rewards.
-  
+
 Usage:
-    python analyze_history.py --npz_file evolutionary_dataset.npz [--num_bins 64]
+    python analyze_history.py \
+        --pt_file evolutionary_dataset.pt \
+        [--num_bins 64] \
+        [--output_dir history]
 
 If no arguments are given, it defaults to:
-    npz_file: evolutionary_dataset.npz
-    num_bins: 64
+    pt_file: results/curriculum_rl/evolutionary_dataset.pt
+    num_bins: 16
+    output_dir: history
 """
 
 import os
-import numpy as np
+import torch
 import argparse
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-def load_data(npz_file):
-    data = np.load(npz_file)
-    states = data['states']
-    actions = data['actions']
-    rewards = data['rewards']
-    dones = data['dones']
-    return states, actions, rewards, dones
+def load_data(pt_file: str):
+    """Load the saved transitions from a .pt file."""
+    data = torch.load(pt_file, map_location='cpu')
+    return data['states'], data['actions'], data['rewards'], data['dones']
 
 def group_episodes_by_done(states, actions, rewards, dones):
     """
@@ -60,12 +61,12 @@ def group_episodes_by_done(states, actions, rewards, dones):
         current_actions.append(a)
         current_rewards.append(r)
         if d:
-            aggregated_reward = np.sum(current_rewards)
+            aggregated_reward = sum(float(x) for x in current_rewards)
             episodes.append({
                 'index': episode_counter,
-                'states': np.array(current_states),
-                'actions': np.array(current_actions),
-                'rewards': np.array(current_rewards),
+                'states': current_states.copy(),
+                'actions': current_actions.copy(),
+                'rewards': current_rewards.copy(),
                 'total_reward': aggregated_reward,
                 'episode_length': len(current_states)
             })
@@ -75,12 +76,12 @@ def group_episodes_by_done(states, actions, rewards, dones):
             current_rewards = []
     # Group any remaining transitions as an incomplete episode.
     if current_states:
-        aggregated_reward = np.sum(current_rewards)
+        aggregated_reward = sum(float(x) for x in current_rewards)
         episodes.append({
             'index': episode_counter,
-            'states': np.array(current_states),
-            'actions': np.array(current_actions),
-            'rewards': np.array(current_rewards),
+            'states': current_states.copy(),
+            'actions': current_actions.copy(),
+            'rewards': current_rewards.copy(),
             'total_reward': aggregated_reward,
             'episode_length': len(current_states)
         })
@@ -117,18 +118,18 @@ def breakdown_state(state, num_bins):
       - Indices 4*num_bins:5*num_bins       : Hard Correct Histogram
       - Indices 5*num_bins:6*num_bins       : Hard Incorrect Histogram
       - Indices 6*num_bins:6*num_bins+3     : Relative dataset sizes (3 values)
-      - Indices 6*num_bins+3:6*num_bins+5     : Extra state features (2 values)
+      - Indices 6*num_bins+3:6*num_bins+5   : Extra state features (2 values)
     Total length = 6*num_bins + 5.
     """
     breakdown = {}
-    breakdown['easy_correct_hist'] = state[0:num_bins]
-    breakdown['easy_incorrect_hist'] = state[num_bins:2*num_bins]
-    breakdown['medium_correct_hist'] = state[2*num_bins:3*num_bins]
+    breakdown['easy_correct_hist']    = state[0:num_bins]
+    breakdown['easy_incorrect_hist']  = state[num_bins:2*num_bins]
+    breakdown['medium_correct_hist']  = state[2*num_bins:3*num_bins]
     breakdown['medium_incorrect_hist'] = state[3*num_bins:4*num_bins]
-    breakdown['hard_correct_hist'] = state[4*num_bins:5*num_bins]
-    breakdown['hard_incorrect_hist'] = state[5*num_bins:6*num_bins]
-    breakdown['relative_sizes'] = state[6*num_bins:6*num_bins+3]
-    breakdown['extra'] = state[6*num_bins+3:6*num_bins+5]
+    breakdown['hard_correct_hist']     = state[4*num_bins:5*num_bins]
+    breakdown['hard_incorrect_hist']   = state[5*num_bins:6*num_bins]
+    breakdown['relative_sizes']       = state[6*num_bins:6*num_bins+3]
+    breakdown['extra']                = state[6*num_bins+3:6*num_bins+5]
     return breakdown
 
 def breakdown_action(action):
@@ -138,11 +139,11 @@ def breakdown_action(action):
       - Mixing ratios for (Easy, Medium, Hard): action[1:4]
       - Sample usage fraction: action[4]
     """
-    breakdown = {}
-    breakdown['learning_rate'] = action[0]
-    breakdown['mixing_ratios'] = action[1:4]
-    breakdown['sample_usage_fraction'] = action[4]
-    return breakdown
+    return {
+        'learning_rate': action[0],
+        'mixing_ratios': action[1:4],
+        'sample_usage_fraction': action[4],
+    }
 
 def save_episode_details(episodes, group_name, num_bins, output_dir):
     """
@@ -155,15 +156,15 @@ def save_episode_details(episodes, group_name, num_bins, output_dir):
             f.write(f"Episode {ep['index']} - Total Reward: {ep['total_reward']}, Length: {ep['episode_length']}\n")
             for i, (state, action, reward) in enumerate(zip(ep['states'], ep['actions'], ep['rewards'])):
                 f.write(f"  Phase {i+1} (Reward: {reward}):\n")
-                state_breakdown = breakdown_state(state, num_bins)
-                action_breakdown = breakdown_action(action)
+                sb = breakdown_state(state, num_bins)
+                ab = breakdown_action(action)
                 f.write("    State breakdown:\n")
-                for key, value in state_breakdown.items():
-                    f.write(f"      {key}: {np.array2string(value, precision=4, separator=',')}\n")
+                for key, value in sb.items():
+                    f.write(f"      {key}: {value}\n")
                 f.write("    Action breakdown:\n")
-                f.write(f"      Learning Rate: {action_breakdown['learning_rate']:.4f}\n")
-                f.write(f"      Mixing Ratios: {np.array2string(action_breakdown['mixing_ratios'], precision=4, separator=',')}\n")
-                f.write(f"      Sample Usage Fraction: {action_breakdown['sample_usage_fraction']:.4f}\n")
+                f.write(f"      Learning Rate: {ab['learning_rate']:.4f}\n")
+                f.write(f"      Mixing Ratios: {ab['mixing_ratios']}\n")
+                f.write(f"      Sample Usage Fraction: {ab['sample_usage_fraction']:.4f}\n")
             f.write("\n")
     print(f"Saved {group_name} episodes analysis to {filename}")
 
@@ -182,180 +183,195 @@ def plot_reward_distribution(episodes, output_dir):
 
 def plot_episode_figure(episode, group_name, num_bins, output_dir):
     """
-    For a given episode, creates a detailed figure with:
-      - TOP BLOCK: For each phase (transition), a row of 4 subplots:
-            * Column 0: Combined "Easy" loss histogram (green for correct, red for incorrect).
-            * Column 1: Combined "Medium" loss histogram.
-            * Column 2: Combined "Hard" loss histogram.
-            * Column 3: State Info bar chart (relative sizes and extra features).
-         Each row is annotated with the phase reward.
-      - BOTTOM BLOCK: Aggregated evolution across phases with 4 subplots:
-            1. Learning Rate evolution.
-            2. Sample Usage evolution.
-            3. Mixing Ratios as a stacked bar plot (one bar per phase).
-            4. Reward evolution (with the last phase reward divided by 10).
-    The resulting figure is saved to the output directory.
+    For a given episode, creates a detailed figure with playful styling:
+      - Adds a fun emoji title and light background.
+      - TOP BLOCK: one row per phase:
+          * Columns 0–2: loss histograms with original colors (green/red), plus hatch patterns.
+          * Column 3: state info bar chart with original 'colors_info'.
+          * Grids, light axis background, and phase annotations keep it lively.
+      - BOTTOM BLOCK: evolution plots with:
+          1. LR (blue, diamond markers) +
+             rocket 🚀 annotation at the max point.
+          2. Sample usage (orange, diamond markers).
+          3. Mixing ratios (stacked bars in original green/yellow/red).
+          4. Reward (magenta, diamond markers) +
+             star ★ annotation at the final point.
     """
+    import torch
+    # Recompute bin edges
+    min_val, max_val, alpha = 0.0, 13.8, 2.0
+    rel = torch.linspace(0, 1, num_bins + 1)
+    edges = (min_val + (max_val - min_val) * (rel ** alpha)).tolist()
+    centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges)-1)]
+    widths  = [edges[i+1] - edges[i]       for i in range(len(edges)-1)]
+
     num_phases = len(episode['states'])
-
-    min_val, max_val = 0.0, 13.8
-    alpha = 2.0                # >1 → more bins near low end
-    rel   = np.linspace(0, 1, num_bins + 1)
-    edges = min_val + (max_val - min_val) * rel**alpha
-    centers = (edges[:-1] + edges[1:]) / 2
-    widths  = edges[1:] - edges[:-1]
-    half_w = widths / 2
-    
-    # Create the figure with uniform row height for the top block.
     fig = plt.figure(figsize=(20, num_phases * 3 + 3))
-    
-    # TOP BLOCK: create a grid with uniform height ratios.
-    gs_top = gridspec.GridSpec(nrows=num_phases, ncols=4, top=0.95, bottom=0.55, 
-                               wspace=0.4, hspace=0.6, height_ratios=[1] * num_phases)
-    
-    # BOTTOM BLOCK: 1 row, 4 columns.
-    gs_bot = gridspec.GridSpec(nrows=1, ncols=4, top=0.5, bottom=0.05, wspace=0.5)
-    
-    # TOP BLOCK: For each phase, plot the state breakdown.
-    for i in range(num_phases):
-        state = episode['states'][i]
-        reward_phase = episode['rewards'][i]
-        s_break = breakdown_state(state, num_bins)
-     
-        # Column 0: Easy losses.
-        ax_easy = fig.add_subplot(gs_top[i, 0])
-        ax_easy.bar(centers - half_w/2, s_break['easy_correct_hist'],  half_w, align='center', color='green')
-        ax_easy.bar(centers + half_w/2, s_break['easy_incorrect_hist'], half_w, align='center', color='red')
-        if i == 0:
-            ax_easy.set_title("Easy Loss Hist", fontsize=10)
-        ax_easy.set_ylabel(f"P{i+1}\nR: {reward_phase:.2f}", fontsize=9)
-        ax_easy.tick_params(axis='both', labelsize=8, rotation=45)
-        if i == 0:
-            ax_easy.legend(fontsize=8)
-        ax_easy.set_xticks(edges)
-        
-        # Column 1: Medium losses.
-        ax_med = fig.add_subplot(gs_top[i, 1])
-        ax_med.bar(centers - half_w/2, s_break['medium_correct_hist'], half_w, color='green')
-        ax_med.bar(centers + half_w/2, s_break['medium_incorrect_hist'], half_w, color='red')
-        if i == 0:
-            ax_med.set_title("Medium Loss Hist", fontsize=10)
-        ax_med.tick_params(axis='both', labelsize=8, rotation=45)
-        ax_med.set_xticks(edges)
-        
-        # Column 2: Hard losses.
-        ax_hard = fig.add_subplot(gs_top[i, 2])
-        ax_hard.bar(centers - half_w/2, s_break['hard_correct_hist'], half_w, color='green')
-        ax_hard.bar(centers + half_w/2, s_break['hard_incorrect_hist'], half_w, color='red')
-        if i == 0:
-            ax_hard.set_title("Hard Loss Hist", fontsize=10)
-        ax_hard.tick_params(axis='both', labelsize=8, rotation=45)
-        ax_hard.set_xticks(edges)
-        
-        # Column 3: State Info.
-        ax_info = fig.add_subplot(gs_top[i, 3])
-        state_info = np.concatenate([s_break['relative_sizes'], s_break['extra']])
-        colors_info = ['blue', 'orange', 'purple', 'cyan', 'magenta']
-        ax_info.bar(np.arange(5), state_info, color=colors_info)
-        ax_info.set_xticks(np.arange(5))
-        ax_info.set_xticklabels(['Easy', 'Med', 'Hard', 'PhaseRatio', 'AvailRatio'], 
-                                rotation=45, fontsize=8)
-        if i == 0:
-            ax_info.set_title("State Info", fontsize=10)
-        ax_info.tick_params(axis='both', labelsize=8)
-    
-    # BOTTOM BLOCK: Aggregated evolution across phases.
-    phases = np.arange(1, num_phases + 1)
-    learning_rates = [episode['actions'][i][0] for i in range(num_phases)]
-    sample_usage = [episode['actions'][i][4] for i in range(num_phases)]
-    mixing_ratios = np.array([episode['actions'][i][1:4] for i in range(num_phases)])
-    rewards_phase = [episode['rewards'][i] for i in range(num_phases)]
-    # Adjust last phase reward by dividing by 10.
-    adjusted_rewards = np.array(rewards_phase, dtype=float)
-    if len(adjusted_rewards) > 0:
-        adjusted_rewards[-1] = adjusted_rewards[-1] / 10.0
+    fig.patch.set_facecolor('#fffaf0')
+    fig.suptitle("🎉 Fun Episode Analysis 🎉", fontsize=18, fontweight='bold', y=0.995)
 
-    # Aggregated Plot 1: Learning Rate Evolution.
-    ax_lr = fig.add_subplot(gs_bot[0, 0])
-    ax_lr.plot(phases, learning_rates, marker='o', linestyle='-', color='blue')
-    ax_lr.set_title("Learning Rate", fontsize=10)
-    ax_lr.set_xlabel("Phase", fontsize=9)
-    ax_lr.set_ylabel("LR", fontsize=9)
-    ax_lr.set_xticks(phases)
-    
-    # Aggregated Plot 2: Sample Usage Evolution.
-    ax_usage = fig.add_subplot(gs_bot[0, 1])
-    ax_usage.plot(phases, sample_usage, marker='o', linestyle='-', color='orange')
-    ax_usage.set_title("Sample Usage", fontsize=10)
-    ax_usage.set_xlabel("Phase", fontsize=9)
-    ax_usage.set_ylabel("Usage", fontsize=9)
-    ax_usage.set_xticks(phases)
-    
-    # Aggregated Plot 3: Mixing Ratios as a stacked bar plot.
-    ax_mix = fig.add_subplot(gs_bot[0, 2])
-    bar_width = 0.6
+    gs_top = gridspec.GridSpec(
+        nrows=num_phases, ncols=4,
+        top=0.90, bottom=0.55, wspace=0.4, hspace=0.6,
+        height_ratios=[1] * num_phases
+    )
+    gs_bot = gridspec.GridSpec(
+        nrows=1, ncols=4,
+        top=0.50, bottom=0.05, wspace=0.5
+    )
+
+    # --- TOP BLOCK ---
     for i in range(num_phases):
-        ratio = mixing_ratios[i]
-        ax_mix.bar(i, ratio[0], color='green', width=bar_width, label='Easy' if i==0 else "")
-        ax_mix.bar(i, ratio[1], bottom=ratio[0], color='orange', width=bar_width, label='Med' if i==0 else "")
-        ax_mix.bar(i, ratio[2], bottom=ratio[0]+ratio[1], color='red', width=bar_width, label='Hard' if i==0 else "")
-    ax_mix.set_xticks(np.arange(num_phases))
-    ax_mix.set_xticklabels([f"P{p}" for p in phases])
-    ax_mix.set_title("Mixing Ratios", fontsize=10)
-    ax_mix.set_xlabel("Phase", fontsize=9)
-    ax_mix.set_ylabel("Ratio", fontsize=9)
-    ax_mix.legend(fontsize=8)
-    
-    # Aggregated Plot 4: Reward Evolution.
-    ax_reward = fig.add_subplot(gs_bot[0, 3])
-    ax_reward.plot(phases, adjusted_rewards, marker='o', linestyle='-', color='black')
-    ax_reward.set_title("Reward", fontsize=10)
-    ax_reward.set_xlabel("Phase", fontsize=9)
-    ax_reward.set_ylabel("Reward", fontsize=9)
-    ax_reward.set_xticks(phases)
-    
-    plt.tight_layout()
-    fig_filename = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed.png")
-    plt.savefig(fig_filename)
-    plt.close()
-    print(f"Saved detailed figure for {group_name} episode {episode['index']} to {fig_filename}")
+        s  = episode['states'][i]
+        r  = episode['rewards'][i]
+        sb = breakdown_state(s, num_bins)
+
+        # Easy losses
+        ax0 = fig.add_subplot(gs_top[i, 0])
+        ax0.set_facecolor('#f5f5f5')
+        ax0.bar(centers, sb['easy_correct_hist'],   widths,
+                align='center', color='green', hatch='//', alpha=0.7, label='Correct')
+        ax0.bar(centers, sb['easy_incorrect_hist'], widths,
+                align='center', color='red',   hatch='xx', alpha=0.7, label='Incorrect')
+        if i == 0:
+            ax0.set_title("Easy Loss Hist", fontsize=10, fontweight='bold')
+            ax0.legend(fontsize=8)
+        ax0.set_ylabel(f"P{i+1}\nR:{r:.2f}", fontsize=9)
+        ax0.grid(True, linestyle='--', alpha=0.5)
+        ax0.tick_params(axis='both', labelsize=8, rotation=45)
+        ax0.set_xticks(edges)
+
+        # Medium losses
+        ax1 = fig.add_subplot(gs_top[i, 1])
+        ax1.set_facecolor('#f5f5f5')
+        ax1.bar(centers, sb['medium_correct_hist'],   widths, color='green', hatch='//', alpha=0.7)
+        ax1.bar(centers, sb['medium_incorrect_hist'], widths, color='red',   hatch='xx', alpha=0.7)
+        if i == 0: ax1.set_title("Medium Loss Hist", fontsize=10, fontweight='bold')
+        ax1.grid(True, linestyle='--', alpha=0.5)
+        ax1.tick_params(axis='both', labelsize=8, rotation=45)
+        ax1.set_xticks(edges)
+
+        # Hard losses
+        ax2 = fig.add_subplot(gs_top[i, 2])
+        ax2.set_facecolor('#f5f5f5')
+        ax2.bar(centers, sb['hard_correct_hist'],   widths, color='green', hatch='//', alpha=0.7)
+        ax2.bar(centers, sb['hard_incorrect_hist'], widths, color='red',   hatch='xx', alpha=0.7)
+        if i == 0: ax2.set_title("Hard Loss Hist", fontsize=10, fontweight='bold')
+        ax2.grid(True, linestyle='--', alpha=0.5)
+        ax2.tick_params(axis='both', labelsize=8, rotation=45)
+        ax2.set_xticks(edges)
+
+        # State Info
+        ax3 = fig.add_subplot(gs_top[i, 3])
+        ax3.set_facecolor('#f5f5f5')
+        info = sb['relative_sizes'].tolist() + sb['extra'].tolist()
+        colors_info = ['blue','orange','purple','cyan','magenta']
+        ax3.bar(range(5), info, color=colors_info, alpha=0.8)
+        if i == 0: ax3.set_title("State Info", fontsize=10, fontweight='bold')
+        ax3.set_xticks(range(5))
+        ax3.set_xticklabels(['Easy','Med','Hard','PhaseRatio','AvailRatio'], rotation=45, fontsize=8)
+        ax3.tick_params(axis='both', labelsize=8)
+        ax3.grid(True, linestyle='--', alpha=0.5)
+        ax3.text(2, max(info)*1.05, f"R={r:.1f}", ha='center', fontsize=8, color='darkred')
+
+    # --- BOTTOM BLOCK ---
+    phases = list(range(1, num_phases + 1))
+    lrs    = [episode['actions'][i][0] for i in range(num_phases)]
+    usage  = [episode['actions'][i][4] for i in range(num_phases)]
+    mixrs  = [episode['actions'][i][1:4] for i in range(num_phases)]
+    rews   = [episode['rewards'][i]        for i in range(num_phases)]
+    if rews: rews[-1] /= 10.0
+
+    # Learning rate
+    ax_lr = fig.add_subplot(gs_bot[0, 0])
+    ax_lr.set_facecolor('#f5f5f5')
+    ax_lr.plot(phases, lrs, marker='D', linestyle='-', color='blue', markersize=6)
+    ax_lr.set_title("Learning Rate"); ax_lr.set_xlabel("Phase"); ax_lr.set_ylabel("LR")
+    ax_lr.set_xticks(phases); ax_lr.grid(True, linestyle=':', alpha=0.6)
+
+    # Sample usage
+    ax_us = fig.add_subplot(gs_bot[0, 1])
+    ax_us.set_facecolor('#f5f5f5')
+    ax_us.plot(phases, usage, marker='D', linestyle='-', color='orange', markersize=6)
+    ax_us.set_title("Sample Usage"); ax_us.set_xlabel("Phase"); ax_us.set_ylabel("Usage")
+    ax_us.set_xticks(phases); ax_us.grid(True, linestyle=':', alpha=0.6)
+
+    # Mixing ratios
+    ax_mx = fig.add_subplot(gs_bot[0, 2])
+    ax_mx.set_facecolor('#f5f5f5')
+    bar_w = 0.6
+    for idx, mr in enumerate(mixrs):
+        bottom = 0.0
+        ax_mx.bar(idx, mr[0], bottom=bottom, width=bar_w, color='green',  label='Easy'  if idx==0 else "")
+        bottom += mr[0]
+        ax_mx.bar(idx, mr[1], bottom=bottom, width=bar_w, color='yellow', label='Med'   if idx==0 else "")
+        bottom += mr[1]
+        ax_mx.bar(idx, mr[2], bottom=bottom, width=bar_w, color='red',    label='Hard'  if idx==0 else "")
+    ax_mx.set_xticks(range(num_phases))
+    ax_mx.set_xticklabels([f"P{p}" for p in phases])
+    ax_mx.set_title("Mixing Ratios"); ax_mx.set_xlabel("Phase"); ax_mx.set_ylabel("Ratio")
+    ax_mx.legend(fontsize=8); ax_mx.grid(True, linestyle=':', alpha=0.6)
+
+    # Reward evolution
+    ax_rw = fig.add_subplot(gs_bot[0, 3])
+    ax_rw.set_facecolor('#f5f5f5')
+    ax_rw.plot(phases, rews, marker='D', linestyle='-', color='magenta', markersize=6)
+    ax_rw.set_title("Reward"); ax_rw.set_xlabel("Phase"); ax_rw.set_ylabel("Reward")
+    ax_rw.set_xticks(phases); ax_rw.grid(True, linestyle=':', alpha=0.6)
+
+    fig.subplots_adjust(top=0.90, bottom=0.05, left=0.05, right=0.98, hspace=0.6, wspace=0.4)
+
+    out_f = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed_fun.png")
+    plt.savefig(out_f)
+    plt.close(fig)
+    print(f"Saved fun detailed figure for {group_name} episode {episode['index']} to {out_f}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze training history from npz file with detailed figures.")
-    parser.add_argument("--npz_file", type=str, default="results/curriculum_rl/evolutionary_dataset.npz",
-                        help="Path to the npz file saved by generate_dataset.py")
-    parser.add_argument("--num_bins", type=int, default=16,
-                        help="Number of bins used in the loss histograms in the state vector (default 16)")
+    parser = argparse.ArgumentParser(
+        description="Analyze training history from pt file with detailed figures."
+    )
+    parser.add_argument(
+        "--pt_file", type=str,
+        default="results/curriculum_rl/evolutionary_dataset.pt",
+        help="Path to the pt file saved by generate_dataset.py"
+    )
+    parser.add_argument(
+        "--num_bins", type=int, default=16,
+        help="Number of bins used in the loss histograms in the state vector"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="history",
+        help="Directory to save analysis outputs (default: history)"
+    )
     args = parser.parse_args()
-    
-    # Create output directory "history"
-    output_dir = "history4"
+
+    output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Load data.
-    states, actions, rewards, dones = load_data(args.npz_file)
-    print(f"Loaded {states.shape[0]} transitions from {args.npz_file}")
-    
+    states, actions, rewards, dones = load_data(args.pt_file)
+    print(f"Loaded {states.shape[0]} transitions from {args.pt_file}")
+
     # Group transitions into episodes using the done flag.
     episodes = group_episodes_by_done(states, actions, rewards, dones)
     print(f"Grouped into {len(episodes)} episodes based on done flags.")
-    
+
     # Select low, median, and high groups.
     low_eps, median_eps, high_eps = select_episode_groups(episodes)
-    
+
     # Save text summaries.
     save_episode_details(low_eps, "low", args.num_bins, output_dir)
     save_episode_details(median_eps, "median", args.num_bins, output_dir)
     save_episode_details(high_eps, "high", args.num_bins, output_dir)
-    
+
     # Plot reward distribution for all episodes.
     plot_reward_distribution(episodes, output_dir)
-    
+
     # Generate detailed figures for each chosen episode.
     for group_name, group_eps in zip(["low", "median", "high"], [low_eps, median_eps, high_eps]):
         for ep in group_eps:
             plot_episode_figure(ep, group_name, args.num_bins, output_dir)
-    
+
     print("Analysis complete.")
 
 if __name__ == "__main__":

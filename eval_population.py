@@ -1,8 +1,7 @@
 # eval_population.py
 #!/usr/bin/env python3
 import argparse
-import numpy as np
-import copy
+import torch
 from tqdm import trange
 
 from population_utils import set_seed, load_config, evaluate_candidate
@@ -11,10 +10,10 @@ from curriculum_env import CurriculumEnv
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--config",         required=True, help="path to your config YAML")
-    p.add_argument("--pop_file",       required=True, help=".npz containing ‘population’")
+    p.add_argument("--pop_file",       required=True, help=".pt c`ntaining ‘population’")
     p.add_argument("--start_idx",    type=int,  required=True, help="first candidate index")
     p.add_argument("--num_candidates", type=int, required=True, help="how many candidates")
-    p.add_argument("--out_file",       required=True, help="where to write this slice’s .npz")
+    p.add_argument("--out_file",       required=True, help="where to write this slice’s .pt")
     args = p.parse_args()
 
     cfg = load_config(args.config)
@@ -23,9 +22,9 @@ def main():
     cfg["device_id"] = 0
     env = CurriculumEnv(cfg)
 
-    data       = np.load(args.pop_file)
+    data       = torch.load(args.pop_file, map_location="cpu")
     population = data["population"]
-    cand_dim   = population.shape[1]
+    cand_dim   = population.size(1)
     num_phases = int(cfg["curriculum"].get("max_phases", 3))
 
     all_s, all_a, all_r, all_ns, all_d = [], [], [], [], []
@@ -37,7 +36,7 @@ def main():
                             unit="cand"):
         idx = args.start_idx + local_idx
         transitions, total_r = evaluate_candidate(
-            copy.deepcopy(env),
+            env,
             population[idx],
             cand_dim,
             num_phases
@@ -52,17 +51,20 @@ def main():
         indices    .append(idx)
 
     # save
-    np.savez(
-        args.out_file,
-        candidate_indices   = np.array(indices,    dtype=int),
-        aggregated_rewards  = np.array(agg_rewards, dtype=float),
-        states              = np.stack(all_s),
-        actions             = np.stack(all_a),
-        rewards             = np.array(all_r),
-        next_states         = np.stack(all_ns),
-        dones               = np.array(all_d,      dtype=bool),
-    )
+    torch.save({
+        'candidate_indices'  : torch.tensor(indices,    dtype=torch.int64),
+        'aggregated_rewards' : torch.tensor(agg_rewards, dtype=torch.float32),
+        'states'             : torch.stack(all_s),
+        'actions'            : torch.stack(all_a),
+        'rewards'            : torch.tensor(all_r,       dtype=torch.float32),
+        'next_states'        : torch.stack(all_ns),
+        'dones'              : torch.tensor(all_d,       dtype=torch.bool),
+    }, args.out_file)
     print(f"Wrote eval slice → {args.out_file}")
 
 if __name__ == "__main__":
     main()
+
+
+
+

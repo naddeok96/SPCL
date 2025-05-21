@@ -14,16 +14,14 @@ import os
 import yaml
 import torch
 import random
-import numpy as np
 import copy
 import argparse
 from tqdm import tqdm
 
 from curriculum_env import CurriculumEnv
 
-def set_seed(seed):
+def set_seed(seed: int):
     random.seed(seed)
-    np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -33,16 +31,15 @@ def load_config(config_file):
         config = yaml.safe_load(f)
     return config
 
-def safe_normalize(arr):
+def safe_normalize(arr: torch.Tensor) -> torch.Tensor:
     """
-    Normalizes a non-negative array so that it sums to 1.
+    Normalizes a non-negative 1D tensor so that it sums to 1.
     If the sum is zero, returns a uniform distribution.
-    Intended for normalizing the mixing ratio (indices 1-3 of each phase block).
     """
-    arr = np.maximum(arr, 0)
+    arr = torch.clamp(arr, min=0.0)
     total = arr.sum()
-    if total == 0:
-        return np.ones_like(arr) / len(arr)
+    if total.item() == 0.0:
+        return torch.full_like(arr, 1.0 / arr.numel())
     return arr / total
 
 def initialize_population(pop_size, candidate_dim, num_phases, macro_actions=None, lr_range=None):
@@ -62,81 +59,81 @@ def initialize_population(pop_size, candidate_dim, num_phases, macro_actions=Non
     population = []
     unit = candidate_dim // num_phases  # should be 5
     if macro_actions:
-        macro_vals = list(macro_actions.values())  # expected to be candidate vectors
+        macro_vals = [torch.tensor(v, dtype=torch.float32).flatten() for v in macro_actions.values()]  # expected to be candidate vectors
         while len(population) < pop_size:
-            base_action = np.array(random.choice(macro_vals))
+            base_action = random.choice(macro_vals).clone()
             base_action = base_action.flatten()  # ensure 1-D
             # If the chosen macro action is smaller than candidate_dim, tile it.
-            if base_action.shape[0] != candidate_dim:
-                base_action = np.tile(base_action, num_phases)
-            noise = np.random.normal(0, 0.1, size=candidate_dim)
+            if base_action.numel() != candidate_dim:
+                base_action = base_action.repeat(num_phases)[:candidate_dim]
+                
+            noise = torch.randn(candidate_dim) * 0.1
             candidate = base_action + noise
             # Enforce constraints for each phase:
             for phase in range(num_phases):
                 idx = phase * unit
-                candidate[idx] = np.clip(candidate[idx], lr_range[0], lr_range[1])
+                candidate[idx] = candidate[idx].clamp(lr_range[0], lr_range[1])
                 candidate[idx+1: idx+4] = safe_normalize(candidate[idx+1: idx+4])
-                candidate[idx+4] = np.clip(candidate[idx+4], 0, 1)
+                candidate[idx+4] = candidate[idx+4].clamp(0.0, 1.0)
             population.append(candidate)
     else:
         for _ in range(pop_size):
-            cand = np.zeros(candidate_dim)
+            cand = torch.zeros(candidate_dim, dtype=torch.float32)
             for phase in range(num_phases):
                 idx = phase * unit
                 cand[idx] = random.uniform(lr_range[0], lr_range[1])
-                cand[idx+1: idx+4] = safe_normalize(np.random.rand(3))
+                cand[idx+1: idx+4] = safe_normalize(torch.rand(3))
                 cand[idx+4] = random.uniform(0, 1)
             population.append(cand)
     return population
 
-def mutate(candidate, mutation_rate, candidate_dim, num_phases, lr_range):
+def mutate(candidate: torch.Tensor,
+           mutation_rate: float,
+           candidate_dim: int,
+           num_phases: int,
+           lr_range: list) -> torch.Tensor:
     """
-    Mutates a candidate by adding Gaussian noise and enforcing the per-phase constraints.
+    Adds Gaussian noise to a candidate and re-applies per-phase constraints.
     """
-    mutated = candidate + np.random.normal(0, mutation_rate, size=candidate.shape)
+    mutated = candidate + torch.randn_like(candidate) * mutation_rate
     unit = candidate_dim // num_phases
     for phase in range(num_phases):
         idx = phase * unit
-        mutated[idx] = np.clip(mutated[idx], lr_range[0], lr_range[1])
-        mutated[idx+1: idx+4] = safe_normalize(mutated[idx+1: idx+4])
-        mutated[idx+4] = np.clip(mutated[idx+4], 0, 1)
+        mutated[idx] = mutated[idx].clamp(lr_range[0], lr_range[1])
+        mutated[idx+1:idx+4] = safe_normalize(mutated[idx+1:idx+4])
+        mutated[idx+4] = mutated[idx+4].clamp(0.0, 1.0)
     return mutated
 
-def crossover(parent1, parent2, candidate_dim, num_phases, lr_range):
+def crossover(parent1: torch.Tensor,
+              parent2: torch.Tensor,
+              candidate_dim: int,
+              num_phases: int,
+              lr_range: list) -> torch.Tensor:
     """
-    Creates a child candidate by crossing over parents and enforcing the constraints.
+    Single-point crossover between two parent tensors plus constraint enforcement.
     """
-    child = parent1.copy()
-    for i in range(len(child)):
-        if random.random() < 0.5:
-            child[i] = parent2[i]
+    mask = torch.rand(candidate_dim) < 0.5
+    child = parent1.clone()
+    child[mask] = parent2[mask]
     unit = candidate_dim // num_phases
     for phase in range(num_phases):
         idx = phase * unit
-        child[idx] = np.clip(child[idx], lr_range[0], lr_range[1])
-        child[idx+1: idx+4] = safe_normalize(child[idx+1: idx+4])
-        child[idx+4] = np.clip(child[idx+4], 0, 1)
+        child[idx] = child[idx].clamp(lr_range[0], lr_range[1])
+        child[idx+1:idx+4] = safe_normalize(child[idx+1:idx+4])
+        child[idx+4] = child[idx+4].clamp(0.0, 1.0)
     return child
 
 def evaluate_candidate(env, candidate, candidate_dim, num_phases):
     """
-    Evaluates a multi-phase candidate on the given environment.
-    
-    The candidate is split into num_phases segments (each of length 5).
-    For each phase, the corresponding 5-dim action is applied to the environment
-    (by calling env.step with that action). Each phase produces a transition:
-      (state, action_phase, reward, next_state, done)
-    The candidate's fitness is computed as the sum of rewards over all phases.
-    
-    Returns:
-        transitions: list of transitions (one per phase)
-        aggregated_reward: sum of rewards from all phases
-        final_state: state after applying all phases (or when done=True)
-        done: final done flag from the environment
+    Runs one curriculum episode for a candidate and returns:
+      - transitions: list of (state, action, reward, next_state, done)
+      - aggregated_reward: float sum of rewards
+      - final_state: torch.Tensor of last observation
+      - done: bool
     """
     transitions = []
     aggregated_reward = 0.0
-    state = env.reset()
+    state = torch.tensor(env.reset(), dtype=torch.float32)
     unit = candidate_dim // num_phases
     for phase in range(num_phases):
         action = candidate[phase*unit:(phase+1)*unit]
@@ -182,15 +179,21 @@ def evolutionary_algorithm(env, num_phases, pop_size, generations, top_k, mutati
         population = new_population
 
         # Periodically save the dataset.
-        if save_path is not None and ((gen + 1) % 1 == 0):
-            states = np.array([h[0] for h in history])
-            actions = np.array([h[1] for h in history])
-            rewards = np.array([h[2] for h in history])
-            next_states = np.array([h[3] for h in history])
-            dones = np.array([h[4] for h in history])
-            np.savez(save_path, states=states, actions=actions, rewards=rewards,
-                     next_states=next_states, dones=dones)
-            tqdm.write(f"Saved partial dataset to {save_path} at generation {gen + 1}")
+        if save_path:
+            states      = torch.stack([h[0] for h in history])
+            actions     = torch.stack([h[1] for h in history])
+            rewards     = torch.tensor([h[2] for h in history], dtype=torch.float32)
+            next_states = torch.stack([h[3] for h in history])
+            dones       = torch.tensor([h[4] for h in history], dtype=torch.bool)
+            torch.save({
+                'states':      states,
+                'actions':     actions,
+                'rewards':     rewards,
+                'next_states': next_states,
+                'dones':       dones
+            }, save_path)
+            tqdm.write(f"Saved dataset to {save_path} at generation {gen+1}")
+
     return history
 
 def main():
@@ -213,7 +216,7 @@ def main():
     
     # Ensure the save directory exists.
     os.makedirs(config["paths"]["save_path"], exist_ok=True)
-    dataset_path = os.path.join(config["paths"]["save_path"], "evolutionary_dataset.npz")
+    dataset_path = os.path.join(config["paths"]["save_path"], "evolutionary_dataset.pt")
     
     history = evolutionary_algorithm(env,
                                      num_phases=num_phases,
@@ -227,24 +230,39 @@ def main():
                                      save_path=dataset_path)
     print(f"Evolutionary algorithm generated {len(history)} transitions.")
     
-    # Final save of the dataset.
-    states = np.array([h[0] for h in history])
-    actions = np.array([h[1] for h in history])
-    rewards = np.array([h[2] for h in history])
-    next_states = np.array([h[3] for h in history])
-    dones = np.array([h[4] for h in history])
-    np.savez(dataset_path, states=states, actions=actions, rewards=rewards,
-             next_states=next_states, dones=dones)
-    print(f"Saved evolutionary dataset to {dataset_path}")
+    # Pre-allocate Python lists
+    states_list      = []
+    actions_list     = []
+    rewards_list     = []  # Python floats
+    next_states_list = []
+    dones_list       = []  # Python bools
+
+    # Suppose `history` is your list of transitions:  (state, action, reward, next_state, done)
+    for (s, a, r, ns, d) in history:
+        states_list.append(s)
+        actions_list.append(a)
+        rewards_list.append(float(r))    # store as plain float
+        next_states_list.append(ns)
+        dones_list.append(bool(d))       # store as plain bool
+
+    # Now convert once at the end:
+    states      = torch.stack(states_list)                      # (N, state_dim)
+    actions     = torch.stack(actions_list)                     # (N, action_dim)
+    rewards     = torch.tensor(rewards_list, dtype=torch.float32)  # (N,)
+    next_states = torch.stack(next_states_list)                 # (N, state_dim)
+    dones       = torch.tensor(dones_list, dtype=torch.bool)    # (N,)
+
+    torch.save({
+        'states':      states,
+        'actions':     actions,
+        'rewards':     rewards,
+        'next_states': next_states,
+        'dones':       dones
+    }, dataset_path)
+    print(f"Saved final dataset to {dataset_path}")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
 
 
 

@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import numpy as np
 import torch.nn.utils as utils
 
 # Define the Actor network.
@@ -61,18 +60,19 @@ class Critic(nn.Module):
     
 # Ornstein-Uhlenbeck noise for exploration.
 class OUNoise:
-    def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.2):
+    def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.2, device="cuda:0"):
         self.action_dim = action_dim
         self.mu = mu
         self.theta = theta
         self.sigma = sigma
+        self.device = device if not isinstance(device, str) else torch.device(device)
         self.reset()
         
     def reset(self):
-        self.state = np.ones(self.action_dim) * self.mu
+        self.state = torch.ones(self.action_dim, device=self.device) * self.mu
         
     def noise(self):
-        dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.action_dim)
+        dx = self.theta * (self.mu - self.state) + self.sigma * torch.randn(self.action_dim, device=self.device)
         self.state = self.state + dx
         return self.state
 
@@ -105,8 +105,9 @@ class DDPGAgent:
         self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=config["rl"]["critic_lr"])
 
         # noise & counters
-        self.ou_noise = OUNoise(action_dim)
+        self.ou_noise = OUNoise(action_dim, device=self.device)
         self.total_it = 0
+        
         # save for annealing
         self.exploration_noise_initial = config["rl"]["exploration_noise"]
         self.exploration_noise = self.exploration_noise_initial
@@ -128,10 +129,14 @@ class DDPGAgent:
             t.data.copy_( t.data * (1 - self.tau) + s.data * self.tau )
 
     def select_action(self, state, noise_enable=True):
-        s = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        if torch.is_tensor(state):
+            s = state.unsqueeze(0).to(self.device).float()
+        else:
+            s = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+
         self.actor.eval()
         with torch.no_grad():
-            a = self.actor(s).cpu().numpy().flatten()
+            a = self.actor(s).squeeze(0)
         self.actor.train()
 
         if noise_enable:
@@ -141,11 +146,11 @@ class DDPGAgent:
 
         # clip & renormalize
         mn, mx = self.config["curriculum"]["learning_rate_range"]
-        a[0] = float(np.clip(a[0], mn, mx))
-        mix = np.maximum(a[1:4], 0.0)
+        a[0] = a[0].clamp(min=mn, max=mx)
+        mix = a[1:4].clamp(min=0.0)
         s = mix.sum()
-        a[1:4] = mix / s if s>0 else np.ones(3)/3
-        a[4] = float(np.clip(a[4], 0,1))
+        a[1:4] = mix / s if s>0 else torch.ones(3)/3
+        a[4] = a[4].clamp(min=0.0, max=1.0)
         return a
     
     def critic_update_only(self, replay_buffer, batch_size):
@@ -165,11 +170,12 @@ class DDPGAgent:
             idxs, weights = None, None
 
         # 2) To tensors
-        s  = torch.FloatTensor(state).to(self.device)
-        a  = torch.FloatTensor(action).to(self.device)
-        r  = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
-        ns = torch.FloatTensor(next_state).to(self.device)
-        d  = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+        # Convert to tensors
+        s  = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
+        a  = torch.as_tensor(action,     dtype=torch.float32, device=self.device)
+        r  = torch.as_tensor(reward,     dtype=torch.float32, device=self.device).unsqueeze(1)
+        ns = torch.as_tensor(next_state, dtype=torch.float32, device=self.device)
+        d  = torch.as_tensor(done,       dtype=torch.float32, device=self.device).unsqueeze(1)
 
         # 3) Compute common TD‑target using both target critics
         with torch.no_grad():
@@ -214,7 +220,8 @@ class DDPGAgent:
         # 7) PER priority update if used (use td1)
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            new_prios = td1.detach().abs().cpu().numpy().flatten() + eps
+            prios = td1.abs().detach().cpu().tolist()
+            new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 
         return {
@@ -228,21 +235,21 @@ class DDPGAgent:
         # 1) sample
         if self.config["rl"].get("per_enabled", False):
             state, action, reward, next_state, done, weights, idxs = replay_buffer.sample(batch_size)
-            weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
-            # anneal β
-            replay_buffer.beta = min(1.0,
-                replay_buffer.beta + (1.0 - self.config["rl"]["per_beta"]) * (self.total_it/self.max_updates)
+            weights = torch.as_tensor(weights, dtype=torch.float32, device=self.device).unsqueeze(1)
+            replay_buffer.beta = min(
+                1.0,
+                replay_buffer.beta + (1.0 - self.config["rl"]["per_beta"]) * (self.total_it / self.max_updates)
             )
         else:
             state, action, reward, next_state, done = replay_buffer.sample(batch_size)
-            weights = None
+            idxs, weights = None, None
 
         # 2) to tensors
-        s = torch.FloatTensor(state).to(self.device)
-        a = torch.FloatTensor(action).to(self.device)
-        r = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
-        ns= torch.FloatTensor(next_state).to(self.device)
-        d = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+        s  = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
+        a  = torch.as_tensor(action,     dtype=torch.float32, device=self.device)
+        r  = torch.as_tensor(reward,     dtype=torch.float32, device=self.device).unsqueeze(1)
+        ns = torch.as_tensor(next_state, dtype=torch.float32, device=self.device)
+        d  = torch.as_tensor(done,       dtype=torch.float32, device=self.device).unsqueeze(1)
 
         # 3) compute target actions with smoothing
         with torch.no_grad():
@@ -303,8 +310,10 @@ class DDPGAgent:
         )
 
         # 8) update priorities
-        if self.config["rl"].get("per_enabled", False):
-            new_prios = (td1.abs().detach().cpu().numpy().flatten() + float(self.config["rl"]["per_epsilon"]))
+        if idxs is not None:
+            eps = float(self.config["rl"].get("per_epsilon", 1e-6))
+            prios = td1.abs().detach().cpu().tolist()
+            new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 
         return {
@@ -312,5 +321,9 @@ class DDPGAgent:
             "critic1_loss": loss1.item(),
             "critic2_loss": loss2.item()
         }
+
+
+
+
 
 

@@ -57,9 +57,12 @@ if __name__ == "__main__":
         "analyze_history.py",
         "eval_population.py",
         "init_population.py",
+        "evolve_population.py",
         "merge_history.py",
         "population_utils.py",
         "run_evolution.sh"
+        
+        "experiment_for_vec_speed.py"
     ]
     # Set the output file path.
     output_file = "all_in_one.py"

@@ -182,3 +182,13 @@ history*
 pids.txt
 populations/
 eval_parts/
+vec_exp*
+vec_seq_full*
+vec_data/
+universal_vec_seq_experiment/
+vec_block_diag_exp/
+temp*
+MNIST/
+logs_mnist_vec/
+saved_model_checkpoints/
+evo_results/

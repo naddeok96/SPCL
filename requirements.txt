@@ -3,6 +3,7 @@ blessed==1.20.0
 certifi==2023.7.22
 charset-normalizer==3.3.1
 click==8.1.7
+cloudpickle==3.1.1
 contourpy==1.1.1
 cycler==0.12.1
 docker-pycreds==0.4.0
@@ -12,6 +13,8 @@ fsspec==2023.10.0
 gitdb==4.0.11
 GitPython==3.1.40
 gpustat==1.1.1
+gym==0.26.2
+gym-notices==0.0.8
 idna==3.4
 importlib-resources==6.1.0
 Jinja2==3.1.2

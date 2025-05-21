@@ -1,19 +1,11 @@
-"""
-Custom environment implementing the curriculum learning process with RL-based
-hyperparameter control, now with dynamic data splits and model architectures.
-"""
-
 import torch
 import random
 import torchvision.transforms as T
 import torchvision
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-import numpy as np
-import os
 import torch.nn as nn
 
-from utils import construct_observation
-from curriculum import eval_loader, run_phase_training, evaluate_accuracy, get_mixed_loader
+from curriculum import eval_loader, run_phase_training
 
 
 def build_cnn_model(n_convs, conv_ch, n_fcs, fc_units, activation_cls, dropout_rate,
@@ -46,8 +38,8 @@ def build_cnn_model(n_convs, conv_ch, n_fcs, fc_units, activation_cls, dropout_r
 
 class CurriculumEnv:
     """
-    Custom environment implementing the curriculum learning process with RL-based
-    hyperparameter control, now with dynamic data splits and model architectures.
+    Custom environment with cached DataLoaders and models,
+    avoiding deep copies by resetting subsets in place.
     """
     def __init__(self, config):
         self.config = config
@@ -73,241 +65,127 @@ class CurriculumEnv:
 
         # Transforms
         mean, std = (0.1307,), (0.3081,)
-        self.easy_transform = T.Compose([
-            T.ToTensor(),
-            T.Normalize(mean, std)
-        ])
+        self.easy_transform = T.Compose([T.ToTensor(), T.Normalize(mean, std)])
         self.medium_transform = T.Compose([
-            T.RandomHorizontalFlip(0.5),
-            T.ColorJitter(0.2, 0.2, 0.2),
-            T.ToTensor(),
-            T.Normalize(mean, std)
+            T.RandomHorizontalFlip(0.5), T.ColorJitter(0.2,0.2,0.2),
+            T.ToTensor(), T.Normalize(mean, std)
         ])
         self.hard_transform = T.Compose([
-            T.RandomHorizontalFlip(0.5),
-            T.ColorJitter(0.3, 0.3, 0.3),
-            T.RandomRotation(15),
-            T.GaussianBlur(3),
-            T.ToTensor(),
-            T.Normalize(mean, std)
+            T.RandomHorizontalFlip(0.5), T.ColorJitter(0.3,0.3,0.3),
+            T.RandomRotation(15), T.GaussianBlur(3),
+            T.ToTensor(), T.Normalize(mean, std)
         ])
 
-        # Placeholder fractions (updated at reset)
-        self.easy_frac = (self.easy_lower + self.easy_upper) / 2.0
-        self.medium_frac = self.medium_lower
+        # Load base datasets
+        data_path = config["paths"]["data_path"]
+        self.full_easy_ds = torchvision.datasets.MNIST(root=data_path, train=True, download=True, transform=self.easy_transform)
+        self.full_medium_ds = torchvision.datasets.MNIST(root=data_path, train=True, download=True, transform=self.medium_transform)
+        self.full_hard_ds = torchvision.datasets.MNIST(root=data_path, train=True, download=True, transform=self.hard_transform)
 
-        # Prepare base dataset and initial splits
-        self.mnist_train = torchvision.datasets.MNIST(
-            root=config["paths"]["data_path"], train=True, download=True, transform=None
-        )
-        self._create_curriculum_datasets()
-
-        # Validation loader
-        self.mnist_test = torchvision.datasets.MNIST(
-            root=config["paths"]["data_path"], train=False, download=True, transform=T.ToTensor()
-        )
-        self.val_loader = DataLoader(self.mnist_test, batch_size=self.batch_size, shuffle=False)
+        # Create empty Subsets
+        self.easy_subset = Subset(self.full_easy_ds, [])
+        self.medium_subset = Subset(self.full_medium_ds, [])
+        self.hard_subset = Subset(self.full_hard_ds, [])
 
         # Hyperparams
         self.train_samples_max = config["curriculum"]["train_samples_max"]
         self.lr_range = config["curriculum"]["learning_rate_range"]
         self.max_phases = config["curriculum"]["max_phases"]
-        self.current_phase = 0
-        self.remaining_samples = self.train_samples_max
 
-        # Initialize placeholder model (will be overridden)
+        # Initialize model cache
         self._init_model()
 
-        # Initial warm‑up loader (rebuilt each reset)
-        full_ds = ConcatDataset([self.easy_ds, self.medium_ds, self.hard_ds])
-        self._warmup_loader = DataLoader(
-            full_ds, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True
-        )
+        # Now perform first reset to build loaders and warm-up
+        self.reset()
 
-    def _create_curriculum_datasets(self):
-        """
-        Split MNIST train into easy/medium/hard according to current fractions.
-        """
-        full_ds = torchvision.datasets.MNIST(
-            root=self.config["paths"]["data_path"], train=True, download=True, transform=None
-        )
-        indices = list(range(len(full_ds)))
-        random.shuffle(indices)
-        n_total = len(indices)
-        n_easy = int(self.easy_frac * n_total)
-        n_medium = int(self.medium_frac * n_total)
-        n_hard = n_total - n_easy - n_medium
-
-        easy_idx = indices[:n_easy]
-        medium_idx = indices[n_easy:n_easy+n_medium]
-        hard_idx = indices[n_easy+n_medium:]
-
-        easy_full = torchvision.datasets.MNIST(
-            root=self.config["paths"]["data_path"], train=True, download=False, transform=self.easy_transform
-        )
-        medium_full = torchvision.datasets.MNIST(
-            root=self.config["paths"]["data_path"], train=True, download=False, transform=self.medium_transform
-        )
-        hard_full = torchvision.datasets.MNIST(
-            root=self.config["paths"]["data_path"], train=True, download=False, transform=self.hard_transform
-        )
-
-        self.easy_ds = Subset(easy_full, easy_idx)
-        self.medium_ds = Subset(medium_full, medium_idx)
-        self.hard_ds = Subset(hard_full, hard_idx)
-
-        self.easy_loader = DataLoader(self.easy_ds, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        self.medium_loader = DataLoader(self.medium_ds, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        self.hard_loader = DataLoader(self.hard_ds, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    def _generate_splits(self):
+        total = len(self.full_easy_ds)
+        idxs = list(range(total))
+        random.shuffle(idxs)
+        n_easy = int(self.easy_frac * total)
+        n_medium = int(self.medium_frac * total)
+        return idxs[:n_easy], idxs[n_easy:n_easy+n_medium], idxs[n_easy+n_medium:]
 
     def _init_model(self):
-        """
-        Initialize or reinitialize the classification model based on sampled architecture.
-        """
         if hasattr(self, "model_config"):
             cfg = self.model_config
-            self.model = build_cnn_model(
-                cfg["n_convs"], cfg["conv_ch"], cfg["n_fcs"],
-                cfg["fc_units"], cfg["activation"], cfg["dropout"]
-            ).to(self.device)
+            self.model = build_cnn_model(cfg["n_convs"], cfg["conv_ch"], cfg["n_fcs"],
+                                         cfg["fc_units"], cfg["activation"], cfg["dropout"]).to(self.device)
         else:
-            # Default MLP fallback
-            self.model = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(28*28, 128),
-                nn.ReLU(),
-                nn.Linear(128, 10)
-            ).to(self.device)
+            self.model = nn.Sequential(nn.Flatten(), nn.Linear(28*28,128), nn.ReLU(), nn.Linear(128,10)).to(self.device)
 
     def get_observation(self):
-        """
-        Compute observation: six loss histograms + relative sizes + extra features.
-        """
-        ec_easy, ei_easy = eval_loader(self.model, self.easy_loader, self.device)
-        ec_med, ei_med = eval_loader(self.model, self.medium_loader, self.device)
-        ec_hard, ei_hard = eval_loader(self.model, self.hard_loader, self.device)
+        ec, ei = eval_loader(self.model, self.easy_loader,   self.device, self.num_bins)
+        mc, mi = eval_loader(self.model, self.medium_loader, self.device, self.num_bins)
+        hc, hi = eval_loader(self.model, self.hard_loader,   self.device, self.num_bins)
 
-        easy_count = len(self.easy_ds)
-        medium_count = len(self.medium_ds)
-        hard_count = len(self.hard_ds)
+        counts = [len(self.easy_subset), len(self.medium_subset), len(self.hard_subset)]
+        total = sum(counts)
+        rel = torch.tensor([c/total for c in counts], device=self.device)
 
-        base_obs = construct_observation(
-            ec_easy, ei_easy,
-            ec_med, ei_med,
-            ec_hard, ei_hard,
-            easy_count, medium_count, hard_count,
-            self.num_bins
-        )
-        phase_ratio = self.current_phase / self.max_phases
-        available_ratio = self.remaining_samples / self.train_samples_max
-        return np.concatenate([base_obs, np.array([phase_ratio, available_ratio])])
+        obs = torch.cat([ec, ei, mc, mi, hc, hi, rel], dim=0)
+        phase = torch.tensor(self.current_phase/self.max_phases, device=self.device).unsqueeze(0)
+        avail = torch.tensor(self.remaining_samples/self.train_samples_max, device=self.device).unsqueeze(0)
+        return torch.cat([obs, phase, avail], dim=0)
 
     def reset(self):
-        """
-        Reinitialize model, data splits, and warm‑up with new random fractions
-        and architecture, then return initial observation.
-        """
-        # Sample new data fractions
+        # Sample fractions
         easy = random.uniform(self.easy_lower, self.easy_upper)
-        max_med = min(easy, 1.0 - easy - self.hard_min)
-        min_med = max(self.medium_lower, (1.0 - easy) / 2.0)
-        if max_med <= min_med:
-            medium = (min_med + max_med) / 2.0
-        else:
-            medium = random.uniform(min_med, max_med)
+        max_med = min(easy, 1.0-easy-self.hard_min)
+        min_med = max(self.medium_lower, (1.0-easy)/2)
         self.easy_frac = easy
-        self.medium_frac = medium
+        self.medium_frac = (min_med+max_med)/2 if max_med<=min_med else random.uniform(min_med, max_med)
 
-        # Rebuild datasets and warm‑up loader
-        self._create_curriculum_datasets()
-        full_ds = ConcatDataset([self.easy_ds, self.medium_ds, self.hard_ds])
-        self._warmup_loader = DataLoader(full_ds, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        # Update subset indices
+        e_idx, m_idx, h_idx = self._generate_splits()
+        self.easy_subset.indices = e_idx
+        self.medium_subset.indices = m_idx
+        self.hard_subset.indices = h_idx
 
-        # Sample new model architecture
-        n_convs = random.choice(self.n_convs_choices)
-        conv_ch = random.choice(self.conv_channels_choices)
-        n_fcs = random.choice(self.n_fcs_choices)
-        fc_units = random.choice(self.fc_units_choices)
-        act_name = random.choice(self.activation_names)
-        activation_cls = getattr(nn, act_name)
-        dropout_rate = random.choice(self.dropout_rates)
+        # Build DataLoaders now that subsets are non-empty
+        dl_args = dict(batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True, persistent_workers=True)
+        self.easy_loader = DataLoader(self.easy_subset, **dl_args)
+        self.medium_loader = DataLoader(self.medium_subset, **dl_args)
+        self.hard_loader = DataLoader(self.hard_subset, **dl_args)
+        self.warmup_loader = DataLoader(ConcatDataset([self.easy_subset, self.medium_subset, self.hard_subset]), **dl_args)
+
+        # Sample new model config
         self.model_config = {
-            "n_convs": n_convs,
-            "conv_ch": conv_ch,
-            "n_fcs": n_fcs,
-            "fc_units": fc_units,
-            "activation": activation_cls,
-            "dropout": dropout_rate
+            "n_convs": random.choice(self.n_convs_choices),
+            "conv_ch": random.choice(self.conv_channels_choices),
+            "n_fcs": random.choice(self.n_fcs_choices),
+            "fc_units": random.choice(self.fc_units_choices),
+            "activation": getattr(nn, random.choice(self.activation_names)),
+            "dropout": random.choice(self.dropout_rates)
         }
-
-        # Initialize the new model
         self._init_model()
 
         # Reset counters
         self.current_phase = 0
         self.remaining_samples = self.train_samples_max
 
-        # Warm‑up epoch
+        # Warm-up
         self.model.train()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=(sum(self.lr_range) / 2.0))
-        criterion = torch.nn.CrossEntropyLoss()
-        
-        # Calculate number of batches to run (15% of the loader)
-        total_batches = len(self._warmup_loader)
-        max_batches = max(1, int(0.15 * total_batches))
-
-        for batch_idx, (imgs, labels) in enumerate(self._warmup_loader):
-            imgs, labels = imgs.to(self.device), labels.to(self.device)
-            optimizer.zero_grad()
-            outputs = self.model(imgs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            if batch_idx + 1 >= max_batches:
-                break
+        opt = torch.optim.Adam(self.model.parameters(), lr=sum(self.lr_range)/2)
+        criterion = nn.CrossEntropyLoss()
+        max_batches = max(1, int(0.25 * len(self.warmup_loader)))
+        for i, (x,y) in enumerate(self.warmup_loader):
+            if i>=max_batches: break
+            x, y = x.to(self.device), y.to(self.device)
+            opt.zero_grad(); loss = criterion(self.model(x), y); loss.backward(); opt.step()
 
         return self.get_observation()
 
     def step(self, action):
-        """
-        Execute one curriculum phase with the given action.
-        Returns: next_obs, reward, done.
-        """
-        min_lr, max_lr = self.lr_range
-        lr = float(np.clip(action[0], min_lr, max_lr))
-        mixing_ratio = action[1:4]
-        sample_frac = action[4]
-
-        samples = int(sample_frac * self.remaining_samples)
-
-        hyperparams = {
-            "training_samples": samples,
-            "learning_rate": lr,
-            "mixture_ratio": mixing_ratio.tolist(),
-            "phase_batch_size": self.config["curriculum"].get("student_batch_size", 1024)
-        }
-
-        reward = run_phase_training(
-            self.model,
-            self.easy_loader,
-            self.medium_loader,
-            self.hard_loader,
-            hyperparams,
-            self.device
-        )
-
-        self.remaining_samples -= samples
-        self.current_phase += 1
-        done = (
-            self.current_phase >= self.max_phases or
-            self.remaining_samples <= 0 or
-            sample_frac <= 0.0
-        )
-        if done:
-            reward *= 10
-        next_obs = self.get_observation()
-        return next_obs, reward, done
-
-
-
-
+        a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32)
+        lr, mix, frac = float(a[0]), a[1:4], float(a[4])
+        num = int(frac * self.remaining_samples)
+        hp = {"training_samples": num, "learning_rate": lr,
+              "mixture_ratio": mix.tolist(), "phase_batch_size": self.batch_size}
+        reward = run_phase_training(self.model, self.easy_loader, self.medium_loader, self.hard_loader, hp, self.device)
+        self.remaining_samples -= num; self.current_phase += 1
+        if self.current_phase>=self.max_phases or self.remaining_samples<=0 or frac<=0:
+            reward *= 10; done = True
+        else:
+            done = False
+        return self.get_observation(), reward, done

@@ -3,11 +3,10 @@ Simple replay buffer implementation for off-policy RL algorithms.
 """
 
 import random
-import numpy as np
-from numpy.random import choice
+import torch
 
 class ReplayBuffer:
-    def __init__(self, capacity):
+    def __init__(self, capacity, device):
         """
         Initialize the replay buffer.
         
@@ -17,21 +16,25 @@ class ReplayBuffer:
         self.capacity = capacity
         self.buffer = []
         self.position = 0
+        self.device = device
 
     def push(self, state, action, reward, next_state, done):
         """
         Add a transition to the replay buffer.
         
         Args:
-            state (np.ndarray): Current state.
-            action (np.ndarray): Action taken.
+            state (torch.Tensor): Current state.
+            action (torch.Tensor): Action taken.
             reward (float): Reward received.
-            next_state (np.ndarray): Next state.
+            next_state (torch.Tensor): Next state.
             done (bool): Whether the episode ended.
         """
+        entry = (state, action, torch.tensor([reward], device=self.device),
+                 next_state, torch.tensor([done], device=self.device, dtype=torch.float32))
         if len(self.buffer) < self.capacity:
-            self.buffer.append(None)
-        self.buffer[self.position] = (state, action, reward, next_state, done)
+            self.buffer.append(entry)
+        else:
+            self.buffer[self.position] = entry
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size):
@@ -44,9 +47,13 @@ class ReplayBuffer:
         Returns:
             tuple: Batch of (state, action, reward, next_state, done) transitions.
         """
-        batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(np.stack, zip(*batch))
-        return state, action, reward, next_state, done
+        idxs = random.sample(range(len(self.buffer)), batch_size)
+        states, actions, rewards, next_states, dones = zip(*(self.buffer[i] for i in idxs))
+        return (torch.stack(states),
+                torch.stack(actions),
+                torch.cat(rewards),
+                torch.stack(next_states),
+                torch.cat(dones).float())
 
     def __len__(self):
         return len(self.buffer)
@@ -55,22 +62,20 @@ class PERBuffer(ReplayBuffer):
     """
     Prioritized Experience Replay buffer.
     """
-    def __init__(self, capacity, alpha=0.6, beta=0.4, epsilon=1e-6, per_type="proportional"):
-        super().__init__(capacity)
-        self.priorities = []
+    def __init__(self, capacity, device, alpha=0.6, beta=0.4, epsilon=1e-6, per_type="proportional"):
+        super().__init__(capacity, device)
+        self.priorities = torch.zeros(capacity, device=device)
         self.alpha = alpha
         self.beta = beta
         self.epsilon = epsilon
         self.per_type = per_type
 
-    def push(self, state, action, reward, next_state, done):
-        # Assign max priority so new transitions are sampled once.
-        max_prio = max(self.priorities) if self.priorities else 1.0
-        super().push(state, action, reward, next_state, done)
-        if len(self.priorities) < self.capacity:
-            self.priorities.append(max_prio)
-        else:
-            self.priorities[self.position - 1] = max_prio
+    def push(self, *args):
+        super().push(*args)
+        idx = (self.position - 1) % self.capacity
+        max_p = self.priorities[:len(self.buffer)].max().item() if len(self.buffer) > 0 else 1.0
+        self.priorities[idx] = max_p
+        
 
     def sample(self, batch_size):
         """
@@ -80,21 +85,26 @@ class PERBuffer(ReplayBuffer):
         
         N = len(self.buffer)
         if self.per_type == "proportional":
-            prios = np.array(self.priorities, dtype=float) + float(self.epsilon)
-            probs = prios ** self.alpha
+            probs = (self.priorities[:N] + self.epsilon) ** self.alpha
         else:
             # rank-based
-            sorted_idx = np.argsort(self.priorities)[::-1]
-            ranks = np.empty_like(sorted_idx)
-            ranks[sorted_idx] = np.arange(1, N+1)
-            probs = 1.0 / (ranks ** self.alpha)
+            ranks = torch.argsort(self.priorities[:N], descending=True).argsort().float() + 1
+            probs = (1.0 / ranks) ** self.alpha
         probs = probs / probs.sum()
-        indices = choice(N, batch_size, p=probs)
-        batch = [self.buffer[i] for i in indices]
-        s, a, r, sp, d = map(np.stack, zip(*batch))
-        weights = (N * probs[indices]) ** (-self.beta)
+
+        idxs = torch.multinomial(probs, batch_size, replacement=True)
+        weights = (N * probs[idxs]) ** (-self.beta)
         weights = weights / weights.max()
-        return s, a, r, sp, d, weights, indices
+
+        batch = [self.buffer[i] for i in idxs.tolist()]
+        states, actions, rewards, next_states, dones = zip(*batch)
+        return (torch.stack(states),
+                torch.stack(actions),
+                torch.cat(rewards),
+                torch.stack(next_states),
+                torch.cat(dones).float(),
+                weights.unsqueeze(1),
+                idxs)
 
     def update_priorities(self, indices, new_prios):
         """
@@ -102,6 +112,10 @@ class PERBuffer(ReplayBuffer):
         """
         for i, p in zip(indices, new_prios):
             self.priorities[i] = p
+
+
+
+
 
 
 

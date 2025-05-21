@@ -13,23 +13,21 @@ import yaml
 import torch
 
 import random
-import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from tqdm import tqdm
-import torch.nn.utils as utils
 
 from off_policy_train import plot_episode_figure
 from curriculum_env import CurriculumEnv
 from rl_agent import DDPGAgent
 from replay_buffer import ReplayBuffer, PERBuffer
 
-def set_seed(seed):
+def set_seed(seed: int):
+    """Set random seeds for reproducibility."""
     random.seed(seed)
-    np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+        torch.cuda.manual_seed_a
 
 def load_config(config_file):
     with open(config_file, 'r') as f:
@@ -72,10 +70,11 @@ def main():
         agent.critic2.load_state_dict(torch.load(c2, map_location=agent.device))
         print(f"Loaded critic2 from {c2}")
 
-     # ── Setup replay buffer and optionally preload from EA dataset ────────────
+    # ── Setup replay buffer and optionally preload from EA dataset ────────────
     if config["rl"].get("per_enabled", False):
         replay_buffer = PERBuffer(
             config["rl"]["buffer_size"],
+            config["device"],
             alpha=config["rl"].get("per_alpha", 0.6),
             beta=config["rl"].get("per_beta", 0.4),
             epsilon=config["rl"].get("per_epsilon", 1e-6),
@@ -86,45 +85,45 @@ def main():
 
     # If desired, seed the on‑policy buffer from your EA dataset:
     if config["rl"].get("seed_replay_buffer", False):
-        ea_path = config["paths"]["pretrain_path"]
-        data   = np.load(ea_path)
-        states       = data["states"]
-        actions      = data["actions"]
-        rewards      = data["rewards"]
-        next_states  = data["next_states"]
-        dones        = data["dones"]
-        for s, a, r, ns, d in zip(states, actions, rewards, next_states, dones):
-            replay_buffer.push(s, a, r, ns, d)
-        print(f"Seeded {len(replay_buffer)} transitions from EA dataset at '{ea_path}'")
+        data = torch.load(config["paths"]["pretrain_path"], map_location="cpu")
+        for s, a, r, ns, d in zip(
+                data["states"],
+                data["actions"],
+                data["rewards"],
+                data["next_states"],
+                data["dones"]
+        ):
+            replay_buffer.push(
+                s.tolist(), a.tolist(), float(r), ns.tolist(), bool(d)
+            )
+        print(f"Seeded {len(replay_buffer)} transitions from EA dataset")
 
     num_episodes = config["rl"].get("on_policy_episodes", 50)
     batch_size   = config["rl"]["batch_size"]
     interval     = max(1, int(num_episodes * 0.05))
 
-        # ── Pre‑sample states for variance tracking ─────────────────────────────
+    # ── Pre‑sample states for variance tracking ─────────────────────────────
     probe_batch_size = config["rl"].get("probe_batch_size", 256)
     probe_from_ea   = config["rl"].get("probe_from_ea", False)
 
     if probe_from_ea:
-        # load EA states from the evolutionary dataset (.npz)
-        data          = np.load(config["paths"]["pretrain_path"])
-        all_states    = data["states"]  # shape (N, state_dim)
-        indices       = np.random.choice(len(all_states),
-                                         size=probe_batch_size,
-                                         replace=False)
-        probe_states  = all_states[indices]
+        # load EA states from the evolutionary dataset (.pt)
+        data       = torch.load(config["paths"]["pretrain_path"], map_location="cpu")
+        all_states = data["states"]  # Tensor of shape (N, state_dim)
+        idxs       = torch.randperm(all_states.size(0))[:probe_batch_size]
+        probe_states = all_states[idxs]
     else:
         # roll the env forward to collect diverse states
         probe_states = []
         state = env.reset()
         for _ in tqdm(range(probe_batch_size), desc="Probing"):
-            action, _, _ = agent.select_action(state, noise_enable=True), None, None
+            action = agent.select_action(state, noise_enable=True), None, None
             next_state, _, done = env.step(action)
             probe_states.append(state)
             state = env.reset() if done else next_state
-        probe_states = np.array(probe_states)
+        probe_states = torch.stack(probe_states)
 
-    probe_states_tensor = torch.FloatTensor(probe_states).to(agent.device)
+    probe_states_tensor = probe_states.to(agent.device).float()
 
     # Trackers
     episode_rewards    = []
@@ -155,15 +154,21 @@ def main():
                 critic1_losses.append(metrics["critic1_loss"])
                 critic2_losses.append(metrics["critic2_loss"])
 
-        all_actor_losses.append(float(np.mean(actor_losses))  if actor_losses  else 0.0)
-        all_critic1_losses.append(float(np.mean(critic1_losses)) if critic1_losses else 0.0)
-        all_critic2_losses.append(float(np.mean(critic2_losses)) if critic2_losses else 0.0)
+        all_actor_losses.append(
+            float(sum(actor_losses)/len(actor_losses)) if actor_losses else 0.0
+        )
+        all_critic1_losses.append(
+            float(sum(critic1_losses)/len(critic1_losses)) if critic1_losses else 0.0
+        )
+        all_critic2_losses.append(
+            float(sum(critic2_losses)/len(critic2_losses)) if critic2_losses else 0.0
+        )
         episode_rewards.append(ep_reward)
 
         # Action‑component variance
         with torch.no_grad():
-            preds = agent.actor(probe_states_tensor).cpu().numpy()
-        var = np.var(preds, axis=0)
+            preds = agent.actor(probe_states_tensor).cpu()
+        var = torch.var(preds, dim=0, unbiased=False)
         action_var_history.append(var)
         update_steps.append(ep)
 
@@ -203,11 +208,11 @@ def main():
             plt.close(fig)
 
             # ── Plot action variance ──────────────────────
-            var_array = np.vstack(action_var_history)
+            var_tensor = torch.tensor(action_var_history)
             names = ["learning_rate","mix_easy","mix_med","mix_hard","sample_usage"]
             fig, axs = plt.subplots(nrows=5, ncols=1, figsize=(6,10), sharex=True)
             for idx, name in enumerate(names):
-                axs[idx].plot(update_steps, var_array[:,idx])
+                axs[idx].plot(update_steps, var_tensor[:,idx].tolist())
                 axs[idx].set_ylabel(name)
             axs[-1].set_xlabel("Episode")
             plt.tight_layout()
@@ -227,9 +232,9 @@ def main():
 
             eval_episode = {
                 "index": ep,
-                "states":  np.array(eval_states),
-                "actions": np.array(eval_actions),
-                "rewards": np.array(eval_rewards),
+                "states":  eval_states,
+                "actions":  [a.tolist() for a in eval_actions],
+                "rewards": eval_rewards,
             }
             plot_episode_figure(eval_episode, f"on_policy_eval_{ep}",
                                 config["observation"]["num_bins"], ckpt_dir)
@@ -253,15 +258,19 @@ def main():
 
     eval_episode = {
         "index": num_episodes,
-        "states":  np.array(eval_states),
-        "actions": np.array(eval_actions),
-        "rewards": np.array(eval_rewards),
+        "states":  eval_states,
+        "actions":  [a.tolist() for a in eval_actions],
+        "rewards": eval_rewards,
     }
     plot_episode_figure(eval_episode, "on_policy_eval_final",
                         config["observation"]["num_bins"], ckpt_dir)
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 
