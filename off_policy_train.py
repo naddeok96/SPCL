@@ -24,6 +24,7 @@ from tqdm import trange, tqdm
 from rl_agent import DDPGAgent
 from replay_buffer import ReplayBuffer, PERBuffer
 from curriculum_env import CurriculumEnv
+from vectorized_mlp_utils import CombinedDataset
 
 def set_seed(seed: int):
     """Set random seeds for reproducibility."""
@@ -221,12 +222,11 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", "-c",
-        default="config.yaml",
-        help="path to your config YAML"
-    )
-    args   = parser.parse_args()
+    parser.add_argument("--config", "-c", default="config.yaml",
+                        help="path to your config YAML")
+    parser.add_argument("--vectorized", action="store_true",
+                        help="use vectorized per-model data loading")
+    args = parser.parse_args()
     config = load_config(args.config)
 
     # config = load_config("config.yaml")
@@ -244,6 +244,21 @@ def main():
     rewards     = data["rewards"]
     next_states = data["next_states"]
     dones       = data["dones"]
+
+    if args.vectorized:
+        # Example of building stacked batches for multiple agents using
+        # the CombinedDataset utility from batch_diag_training_exp.py.
+        # Here we simply wrap the same dataset multiple times to mimic
+        # per-agent loaders.
+        from torchvision import datasets, transforms
+        from torch.utils.data import DataLoader
+
+        tf = transforms.Compose([transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))])
+        dsets = [datasets.MNIST(root="./data", train=True, download=True, transform=tf)
+                 for _ in range(2)]
+        combined = CombinedDataset(dsets)
+        loader_vec = DataLoader(combined, batch_size=config["rl"]["batch_size"], shuffle=True)
+        print(f"Vectorized loader with {len(dsets)} datasets created (placeholder).")
 
     # Populate the replay buffer.
     if config["rl"].get("per_enabled", False):

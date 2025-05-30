@@ -7,6 +7,18 @@ echo "Activating venv at $VENV_PATH"
 # shellcheck source=/dev/null
 source "$VENV_PATH/bin/activate"
 
+# Optional vectorized MLP training step. If MODEL_CFG_JSON exists we
+# will train all models on the same data using a vectorized forward
+# pass similar to experiment_for_vec_speed.py.  The resulting state
+# dicts are saved to TRAINED_MODELS_PT.
+MODEL_CFG_JSON="evo_results/model_configs.json"
+TRAINED_MODELS_PT="evo_results/vectorized_models.pt"
+if [ -f "$MODEL_CFG_JSON" ]; then
+  echo "Vectorized training using $MODEL_CFG_JSON"
+  python vectorized_training.py --config "$MODEL_CFG_JSON" \
+    --output "$TRAINED_MODELS_PT" --epochs 1 --batch_size 256
+fi
+
 # Configuration and directories
 CONFIG="config.yaml"
 GPUS=(0 1 2 3 4)

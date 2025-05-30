@@ -16,6 +16,7 @@ import random
 import matplotlib.pyplot as plt
 import argparse
 from tqdm import tqdm
+from vectorized_mlp_utils import CombinedDataset
 
 from off_policy_train import plot_episode_figure
 from curriculum_env import CurriculumEnv
@@ -37,6 +38,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="config.yaml",
                         help="Path to config file")
+    parser.add_argument("--vectorized", action="store_true",
+                        help="use vectorized per-model data loading")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -52,6 +55,16 @@ def main():
     obs_dim = len(env.reset())
     action_dim = 5
     agent = DDPGAgent(obs_dim, action_dim, config)
+
+    if args.vectorized:
+        from torchvision import datasets, transforms
+        from torch.utils.data import DataLoader
+        from vectorized_mlp_utils import CombinedDataset
+        tf = transforms.Compose([transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))])
+        dsets = [datasets.MNIST(root="./data", train=True, download=True, transform=tf)
+                 for _ in range(2)]
+        _ = DataLoader(CombinedDataset(dsets), batch_size=config["rl"]["batch_size"], shuffle=True)
+        print("Vectorized per-model data loader initialized (placeholder)")
 
     # Load actor
     actor_path = config["paths"].get("on_policy_actor_model", None)

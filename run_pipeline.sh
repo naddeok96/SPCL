@@ -24,14 +24,14 @@ if [ "$RUN_DATASET" = true ]; then
 fi
 
 if [ "$RUN_OFFPOLICY" = true ]; then
-  echo "=== Step 2/3: Off‑policy training ==="
-  python off_policy_train.py --config "$CONFIG"
+  echo "=== Step 2/3: Off-policy training ==="
+  python off_policy_train.py --config "$CONFIG" --vectorized
   echo
 fi
 
 if [ "$RUN_ONPOLICY" = true ]; then
-  echo "=== Step 3/3: On‑policy training ==="
-  python on_policy_train.py --config "$CONFIG"
+  echo "=== Step 3/3: On-policy training ==="
+  python on_policy_train.py --config "$CONFIG" --vectorized
   echo
 fi
 
