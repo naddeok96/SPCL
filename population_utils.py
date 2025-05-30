@@ -110,10 +110,12 @@ def evaluate_candidate(env: CurriculumEnv,
     unit = candidate_dim // num_phases
     done = False
     for p in trange(num_phases, desc="Eval phases", unit="phase", leave=False):
-        action = candidate[state.new_zeros(())] if False else None  # placeholder
-        
-        idx = len(transitions) * unit
-        action = candidate[idx:idx+unit]
+        # Each candidate encodes a fixed action vector for every phase.
+        # The tensor is laid out sequentially as
+        #   [phase0_action, phase1_action, ...].
+        # Extract the portion corresponding to the current phase.
+        idx = p * unit
+        action = candidate[idx:idx + unit]
         
         nxt, r, done = env.step(action)
         transitions.append((state, action, r, nxt, done))
