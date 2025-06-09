@@ -169,10 +169,10 @@ class PaddedBatchedMLP(nn.Module):
 
         for li in range(self.max_depth):
             mask = torch.tensor([li < d for d in self.depths], dtype=torch.bool)
-            self.register_buffer(f"mask_{li}", mask.view(-1,1,1))
+            self.register_buffer(f"mask_{li}", mask.reshape(-1,1,1))
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         x = x.unsqueeze(0).expand(self.num_models, -1, -1)
         for li, (W, B) in enumerate(zip(self.weights, self.biases)):
             y = torch.bmm(W.to(x.device), x.transpose(1,2)).transpose(1,2) + B.to(x.device).unsqueeze(1)
@@ -209,8 +209,8 @@ def _run_phase_training_batched(model, easy_loader, medium_loader, hard_loader, 
         opt.zero_grad()
         outs = model(imgs)
         lbl = labels.expand(model.num_models, -1)
-        losses = criterion(outs.view(-1, outs.size(-1)), lbl.reshape(-1))
-        loss_pm = losses.view(model.num_models, -1).mean(dim=1)
+        losses = criterion(outs.reshape(-1, outs.size(-1)), lbl.reshape(-1))
+        loss_pm = losses.reshape(model.num_models, -1).mean(dim=1)
         loss_pm.sum().backward()
         opt.step()
         phase_samples += imgs.size(0)
@@ -253,8 +253,8 @@ def eval_loader_batched(model, loader, device, num_bins):
             labels = labels.to(device, non_blocking=True)
             outs = model(imgs)  # [num_models, batch, C]
             lbl = labels.expand(model.num_models, -1)
-            losses = ce_loss(outs.view(-1, outs.size(-1)), lbl.reshape(-1))
-            losses = losses.view(model.num_models, -1)
+            losses = ce_loss(outs.reshape(-1, outs.size(-1)), lbl.reshape(-1))
+            losses = losses.reshape(model.num_models, -1)
             preds = outs.argmax(dim=2)
             correct = preds.eq(labels)
             for mi in range(model.num_models):
@@ -305,7 +305,7 @@ def evaluate_candidate_parallel(cfg: dict,
         hc, hi = eval_loader_batched(vec_model, base_env.hard_loader, base_env.device, base_env.num_bins)
         counts = [len(base_env.easy_subset), len(base_env.medium_subset), len(base_env.hard_subset)]
         total = sum(counts)
-        rel = torch.tensor([c/total for c in counts], device=base_env.device).view(1,-1)
+        rel = torch.tensor([c/total for c in counts], device=base_env.device).reshape(1,-1)
         rel = rel.expand(vec_model.num_models, -1)
         obs = torch.cat([ec, ei, mc, mi, hc, hi, rel], dim=1)
         phase = torch.full((vec_model.num_models,1), base_env.current_phase/base_env.max_phases, device=base_env.device)
