@@ -253,8 +253,8 @@ def eval_loader_batched(model, loader, device, num_bins):
             labels = labels.to(device, non_blocking=True)
             outs = model(imgs)  # [num_models, batch, C]
             lbl = labels.expand(model.num_models, -1)
-            losses = ce_loss(outs.view(-1, outs.size(-1)), lbl.reshape(-1))
-            losses = losses.view(model.num_models, -1)
+            losses = ce_loss(outs.reshape(-1, outs.size(-1)), lbl.reshape(-1))
+            losses = losses.reshape(model.num_models, -1)
             preds = outs.argmax(dim=2)
             correct = preds.eq(labels)
             for mi in range(model.num_models):
