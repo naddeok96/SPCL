@@ -36,6 +36,18 @@ def build_cnn_model(n_convs, conv_ch, n_fcs, fc_units, activation_cls, dropout_r
     return nn.Sequential(*layers)
 
 
+def build_mlp_model(hidden_layers, activation_cls, input_dim=28*28, num_classes=10):
+    """Dynamically build an MLP with the given hidden layer sizes."""
+    layers = [nn.Flatten()]
+    in_features = input_dim
+    for units in hidden_layers:
+        layers.append(nn.Linear(in_features, units))
+        layers.append(activation_cls())
+        in_features = units
+    layers.append(nn.Linear(in_features, num_classes))
+    return nn.Sequential(*layers)
+
+
 class CurriculumEnv:
     """
     Custom environment with cached DataLoaders and models,
@@ -107,12 +119,21 @@ class CurriculumEnv:
         return idxs[:n_easy], idxs[n_easy:n_easy+n_medium], idxs[n_easy+n_medium:]
 
     def _init_model(self):
-        if hasattr(self, "model_config"):
-            cfg = self.model_config
-            self.model = build_cnn_model(cfg["n_convs"], cfg["conv_ch"], cfg["n_fcs"],
-                                         cfg["fc_units"], cfg["activation"], cfg["dropout"]).to(self.device)
+        model_type = self.config.get("model_type", "cnn")
+        if model_type == "mlp":
+            if hasattr(self, "model_config"):
+                cfg = self.model_config
+                act = cfg.get("activation", nn.ReLU)
+                self.model = build_mlp_model(cfg["hidden_layers"], act).to(self.device)
+            else:
+                self.model = nn.Sequential(nn.Flatten(), nn.Linear(28*28,128), nn.ReLU(), nn.Linear(128,10)).to(self.device)
         else:
-            self.model = nn.Sequential(nn.Flatten(), nn.Linear(28*28,128), nn.ReLU(), nn.Linear(128,10)).to(self.device)
+            if hasattr(self, "model_config"):
+                cfg = self.model_config
+                self.model = build_cnn_model(cfg["n_convs"], cfg["conv_ch"], cfg["n_fcs"],
+                                             cfg["fc_units"], cfg["activation"], cfg["dropout"]).to(self.device)
+            else:
+                self.model = nn.Sequential(nn.Flatten(), nn.Linear(28*28,128), nn.ReLU(), nn.Linear(128,10)).to(self.device)
 
     def get_observation(self):
         ec, ei = eval_loader(self.model, self.easy_loader,   self.device, self.num_bins)
@@ -149,15 +170,23 @@ class CurriculumEnv:
         self.hard_loader = DataLoader(self.hard_subset, **dl_args)
         self.warmup_loader = DataLoader(ConcatDataset([self.easy_subset, self.medium_subset, self.hard_subset]), **dl_args)
 
-        # Sample new model config
-        self.model_config = {
-            "n_convs": random.choice(self.n_convs_choices),
-            "conv_ch": random.choice(self.conv_channels_choices),
-            "n_fcs": random.choice(self.n_fcs_choices),
-            "fc_units": random.choice(self.fc_units_choices),
-            "activation": getattr(nn, random.choice(self.activation_names)),
-            "dropout": random.choice(self.dropout_rates)
-        }
+        model_type = self.config.get("model_type", "cnn")
+        if model_type == "mlp":
+            depth = random.randint(1, 3)
+            widths = [random.randint(32, 128) for _ in range(depth)]
+            self.model_config = {
+                "hidden_layers": widths,
+                "activation": getattr(nn, random.choice(self.activation_names))
+            }
+        else:
+            self.model_config = {
+                "n_convs": random.choice(self.n_convs_choices),
+                "conv_ch": random.choice(self.conv_channels_choices),
+                "n_fcs": random.choice(self.n_fcs_choices),
+                "fc_units": random.choice(self.fc_units_choices),
+                "activation": getattr(nn, random.choice(self.activation_names)),
+                "dropout": random.choice(self.dropout_rates)
+            }
         self._init_model()
 
         # Reset counters

@@ -4,8 +4,7 @@ import argparse
 import torch
 from tqdm import trange
 
-from population_utils import set_seed, load_config, evaluate_candidate
-from curriculum_env import CurriculumEnv
+from population_utils import set_seed, load_config, evaluate_candidate_parallel
 
 def main():
     p = argparse.ArgumentParser()
@@ -14,13 +13,17 @@ def main():
     p.add_argument("--start_idx",    type=int,  required=True, help="first candidate index")
     p.add_argument("--num_candidates", type=int, required=True, help="how many candidates")
     p.add_argument("--out_file",       required=True, help="where to write this slice’s .pt")
+    p.add_argument("--num_models", type=int, default=1, help="number of models to evaluate per candidate")
+    p.add_argument("--model_type", choices=["cnn", "mlp"], default=None,
+                   help="override model type from config")
     args = p.parse_args()
 
     cfg = load_config(args.config)
+    if args.model_type:
+        cfg["model_type"] = args.model_type
     set_seed(cfg.get("seed", 42))
     cfg["device"]    = "cuda:0"
     cfg["device_id"] = 0
-    env = CurriculumEnv(cfg)
 
     data       = torch.load(args.pop_file, map_location="cpu")
     population = data["population"]
@@ -35,11 +38,12 @@ def main():
                             desc=f"Eval gen slice {args.start_idx}-{args.start_idx+args.num_candidates-1}",
                             unit="cand"):
         idx = args.start_idx + local_idx
-        transitions, total_r = evaluate_candidate(
-            env,
+        transitions, total_r = evaluate_candidate_parallel(
+            cfg,
             population[idx],
             cand_dim,
-            num_phases
+            num_phases,
+            args.num_models
         )
         for (s, a, r, ns, d) in transitions:
             all_s .append(s)
