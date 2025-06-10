@@ -65,6 +65,14 @@ for (( gen=0; gen<GENERATIONS; gen++ )); do
   wait
   echo "All evals for gen $gen done." | tee -a "$LOG_DIR/run_evolution.log"
 
+  expected_parts=$TOTAL_RUNS
+  found_parts=$(ls "$EVAL_DIR"/eval_gen${gen}_part*.pt 2>/dev/null | wc -l)
+  if [ "$found_parts" -ne "$expected_parts" ]; then
+    echo "Error: expected $expected_parts eval files but found $found_parts" |
+      tee -a "$LOG_DIR/run_evolution.log"
+    exit 1
+  fi
+
   # 3) Merge eval parts into a per-generation history segment
   python merge_history.py --history_dir "$EVAL_DIR" --output "$HIST_DIR/history_gen${gen}.pt" 2>&1 | tee -a "$LOG_DIR/merge_history_gen${gen}.log"
 
