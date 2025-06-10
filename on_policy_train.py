@@ -27,7 +27,7 @@ def set_seed(seed: int):
     random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_a
+        torch.cuda.manual_seed_all(seed)
 
 def load_config(config_file):
     with open(config_file, 'r') as f:
