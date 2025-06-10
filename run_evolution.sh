@@ -9,17 +9,17 @@ source "$VENV_PATH/bin/activate"
 
 # Configuration and directories
 CONFIG="config.yaml"
-GPUS=(0 1 2 3 4)
-RUNS_PER_GPU=1
-POP_SIZE=12
-GENERATIONS=2
+GPUS=(0 1)
+RUNS_PER_GPU=2
+POP_SIZE=124
+GENERATIONS=124
 
-SAVE_PATH="evo_results/saved_model_checkpoints"
-POP_DIR="evo_results/populations"
-EVAL_DIR="evo_results/eval_parts"
-HIST_DIR="evo_results/history"
-LOG_DIR="evo_results/logs"
-PID_FILE="evo_results/pids.txt"
+SAVE_PATH="seq_evo_results/saved_model_checkpoints"
+POP_DIR="seq_evo_results/populations"
+EVAL_DIR="seq_evo_results/eval_parts"
+HIST_DIR="seq_evo_results/history"
+LOG_DIR="seq_evo_results/logs"
+PID_FILE="seq_evo_results/pids.txt"
 
 # Clean any old PID file and recreate directories
 rm -f "$PID_FILE"
