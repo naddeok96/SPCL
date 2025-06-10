@@ -274,10 +274,9 @@ def eval_loader_batched(model, loader, device, num_bins):
                 break
 
     totals = hist_c + hist_i
-    S = totals.sum(dim=1, keepdim=True)
-    mask = S.squeeze(-1) > 0
-    hist_c[mask] /= S[mask]
-    hist_i[mask] /= S[mask]
+    S = totals.sum(dim=1, keepdim=True).clamp(min=1.0)
+    hist_c /= S
+    hist_i /= S
     return hist_c, hist_i
 
 
