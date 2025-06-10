@@ -63,7 +63,14 @@ class ParallelMLP(PaddedBatchedMLP):
     """``PaddedBatchedMLP`` variant that accepts per-model batches."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # ``x`` expected [num_models, batch, 1, 28, 28]
+        """Forward pass supporting shared or per-model batches."""
+        if x.dim() == 4:
+            # ``x`` is [batch, 1, 28, 28]; replicate for all models
+            x = x.unsqueeze(0).expand(self.num_models, -1, -1, -1, -1)
+        else:
+            # ``x`` should be [num_models, batch, 1, 28, 28]
+            assert x.dim() == 5, f"unexpected input shape: {tuple(x.shape)}"
+            assert x.size(0) <= self.num_models
         n, b = x.size(0), x.size(1)
         x = x.view(n, b, -1)
         for li, (W, B) in enumerate(zip(self.weights, self.biases)):
@@ -133,8 +140,9 @@ def train_group(vec_model: ParallelMLP, env: CurriculumEnv, hyper_list: List[dic
     crit = nn.CrossEntropyLoss(reduction="none")
     vec_model.train()
     for imgs, labels in loader:
-        imgs = imgs.to(device)
-        labels = labels.to(device)
+        # Loader returns [batch, num_models, ...]; swap to [num_models, batch, ...]
+        imgs = imgs.to(device).transpose(0, 1)
+        labels = labels.to(device).transpose(0, 1)
         opt.zero_grad()
         outs = vec_model(imgs)
         loss = crit(outs.reshape(-1, outs.size(-1)), labels.reshape(-1))
