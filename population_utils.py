@@ -209,7 +209,8 @@ def _run_phase_training_batched(model, easy_loader, medium_loader, hard_loader, 
         opt.zero_grad()
         outs = model(imgs)
         lbl = labels.expand(model.num_models, -1)
-        losses = criterion(outs.view(-1, outs.size(-1)), lbl.reshape(-1))
+        # Use reshape instead of view to avoid contiguity issues
+        losses = criterion(outs.reshape(-1, outs.size(-1)), lbl.reshape(-1))
         loss_pm = losses.view(model.num_models, -1).mean(dim=1)
         loss_pm.sum().backward()
         opt.step()
