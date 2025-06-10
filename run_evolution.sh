@@ -14,12 +14,13 @@ RUNS_PER_GPU=1
 POP_SIZE=12
 GENERATIONS=2
 
-SAVE_PATH="evo_results/saved_model_checkpoints"
-POP_DIR="evo_results/populations"
-EVAL_DIR="evo_results/eval_parts"
-HIST_DIR="evo_results/history"
-LOG_DIR="evo_results/logs"
-PID_FILE="evo_results/pids.txt"
+ROOT_DIR="$(pwd)"
+SAVE_PATH="$ROOT_DIR/evo_results/saved_model_checkpoints"
+POP_DIR="$ROOT_DIR/evo_results/populations"
+EVAL_DIR="$ROOT_DIR/evo_results/eval_parts"
+HIST_DIR="$ROOT_DIR/evo_results/history"
+LOG_DIR="$ROOT_DIR/evo_results/logs"
+PID_FILE="$ROOT_DIR/evo_results/pids.txt"
 
 # Clean any old PID file and recreate directories
 rm -f "$PID_FILE"
@@ -64,6 +65,14 @@ for (( gen=0; gen<GENERATIONS; gen++ )); do
   echo "Waiting for all $TOTAL_RUNS eval jobs…" | tee -a "$LOG_DIR/run_evolution.log"
   wait
   echo "All evals for gen $gen done." | tee -a "$LOG_DIR/run_evolution.log"
+
+  expected_parts=$TOTAL_RUNS
+  found_parts=$(ls "$EVAL_DIR"/eval_gen${gen}_part*.pt 2>/dev/null | wc -l)
+  if [ "$found_parts" -ne "$expected_parts" ]; then
+    echo "Error: expected $expected_parts eval files but found $found_parts" |
+      tee -a "$LOG_DIR/run_evolution.log"
+    exit 1
+  fi
 
   # 3) Merge eval parts into a per-generation history segment
   python merge_history.py --history_dir "$EVAL_DIR" --output "$HIST_DIR/history_gen${gen}.pt" 2>&1 | tee -a "$LOG_DIR/merge_history_gen${gen}.log"

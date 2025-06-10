@@ -51,6 +51,7 @@ for (( gen=0; gen<GENERATIONS; gen++ )); do
         --config "$CONFIG" --pop_file "$POP_FILE" \
         --start_idx "$start" --num_candidates "$cnt" \
         --out_file "$OUT" --num_models "$NUM_MODELS" --model_type mlp \
+        --parallel \
         > "$LOGF" 2>&1 &
       echo $! >> "$PID_FILE"
       run_idx=$(( run_idx + 1 ))

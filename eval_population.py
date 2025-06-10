@@ -4,7 +4,13 @@ import argparse
 import torch
 from tqdm import trange
 
-from population_utils import set_seed, load_config, evaluate_candidate_parallel
+from population_utils import (
+    set_seed,
+    load_config,
+    evaluate_candidate,
+    evaluate_candidate_parallel,
+)
+from curriculum_env import CurriculumEnv
 
 def main():
     p = argparse.ArgumentParser()
@@ -16,6 +22,8 @@ def main():
     p.add_argument("--num_models", type=int, default=1, help="number of models to evaluate per candidate")
     p.add_argument("--model_type", choices=["cnn", "mlp"], default=None,
                    help="override model type from config")
+    p.add_argument("--parallel", action="store_true",
+                   help="use evaluate_candidate_parallel (for multi-model eval)")
     args = p.parse_args()
 
     cfg = load_config(args.config)
@@ -33,18 +41,30 @@ def main():
     all_s, all_a, all_r, all_ns, all_d = [], [], [], [], []
     agg_rewards, indices = [], []
 
+    env = None
+    if not args.parallel:
+        env = CurriculumEnv(cfg)
+
     # tqdm over the slice
     for local_idx in trange(args.num_candidates,
                             desc=f"Eval gen slice {args.start_idx}-{args.start_idx+args.num_candidates-1}",
                             unit="cand"):
         idx = args.start_idx + local_idx
-        transitions, total_r = evaluate_candidate_parallel(
-            cfg,
-            population[idx],
-            cand_dim,
-            num_phases,
-            args.num_models
-        )
+        if args.parallel:
+            transitions, total_r = evaluate_candidate_parallel(
+                cfg,
+                population[idx],
+                cand_dim,
+                num_phases,
+                args.num_models,
+            )
+        else:
+            transitions, total_r = evaluate_candidate(
+                env,
+                population[idx],
+                cand_dim,
+                num_phases,
+            )
         for (s, a, r, ns, d) in transitions:
             all_s .append(s)
             all_a .append(a)
