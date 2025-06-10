@@ -117,7 +117,7 @@ def main():
         probe_states = []
         state = env.reset()
         for _ in tqdm(range(probe_batch_size), desc="Probing"):
-            action = agent.select_action(state, noise_enable=True), None, None
+            action = agent.select_action(state, noise_enable=True)
             next_state, _, done = env.step(action)
             probe_states.append(state)
             state = env.reset() if done else next_state
