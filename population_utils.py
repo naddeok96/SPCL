@@ -236,7 +236,13 @@ def _run_phase_training_batched(model, easy_loader, medium_loader, hard_loader, 
 
 
 def eval_loader_batched(model, loader, device, num_bins):
-    """Vectorized eval_loader for PaddedBatchedMLP."""
+    """Vectorized ``eval_loader`` for ``PaddedBatchedMLP``.
+
+    The normalization step divides each histogram row by the total count for
+    that row.  ``totals.sum`` returns a ``(N, 1)`` tensor, so we squeeze the
+    trailing dimension before using it as a boolean mask to select the rows to
+    normalize.
+    """
     model.eval()
     device = torch.device(device) if isinstance(device, str) else device
 
@@ -269,7 +275,7 @@ def eval_loader_batched(model, loader, device, num_bins):
 
     totals = hist_c + hist_i
     S = totals.sum(dim=1, keepdim=True)
-    mask = S > 0
+    mask = S.squeeze(-1) > 0
     hist_c[mask] /= S[mask]
     hist_i[mask] /= S[mask]
     return hist_c, hist_i
