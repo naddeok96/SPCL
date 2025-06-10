@@ -23,8 +23,8 @@ curriculum:
   student_batch_size: 512
 
 rl:
-  ea_pop_size:      12
-  ea_generations:   2
+  ea_pop_size:      124
+  ea_generations:   124
   ea_top_k:         3
   ea_mutation_rate: 0.1
 
