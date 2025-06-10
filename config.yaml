@@ -41,6 +41,7 @@ rl:
   batch_size:                    256
   probe_from_ea:                 true
   probe_batch_size:              128
+  num_parallel_students:         4
 
   actor_lr:  0.0003
   critic_lr: 0.001
@@ -83,6 +84,7 @@ paths:
   on_policy_actor_model:    "results/off_policy/off_policy_actor_model_final.pth"
   on_policy_critic1_model:  "results/off_policy/off_policy_critic1_model_final.pth"
   on_policy_critic2_model:  "results/off_policy/off_policy_critic2_model_final.pth"
+  on_policy_parallel_dir: "results/on_policy_parallel"
 
 compare_models:
   Off Policy Start:
