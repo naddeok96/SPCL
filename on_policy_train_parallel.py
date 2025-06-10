@@ -149,11 +149,9 @@ def train_group(vec_model: ParallelMLP, env: CurriculumEnv, hyper_list: List[dic
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="config.yaml")
-    args = parser.parse_args()
+    config_path = "config_on_policy.yaml"
 
-    cfg = load_config(args.config)
+    cfg = load_config(config_path)
     os.makedirs(cfg["paths"]["on_policy_parallel_dir"], exist_ok=True)
     ckpt_dir = cfg["paths"]["on_policy_parallel_dir"]
 
