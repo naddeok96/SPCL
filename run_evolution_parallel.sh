@@ -7,18 +7,18 @@ echo "Activating venv at $VENV_PATH"
 source "$VENV_PATH/bin/activate"
 
 CONFIG="config.yaml"
-GPUS=(0 1 2 3 4)
+GPUS=(2 3)
 RUNS_PER_GPU=1
-POP_SIZE=12
-GENERATIONS=2
-NUM_MODELS=4
+POP_SIZE=124
+GENERATIONS=124
+NUM_MODELS=1000
 
-SAVE_PATH="evo_results_parallel/saved_model_checkpoints"
-POP_DIR="evo_results_parallel/populations"
-EVAL_DIR="evo_results_parallel/eval_parts"
-HIST_DIR="evo_results_parallel/history"
-LOG_DIR="evo_results_parallel/logs"
-PID_FILE="evo_results_parallel/pids.txt"
+SAVE_PATH="vec_evo_results_parallel/saved_model_checkpoints"
+POP_DIR="vec_evo_results_parallel/populations"
+EVAL_DIR="vec_evo_results_parallel/eval_parts"
+HIST_DIR="vec_evo_results_parallel/history"
+LOG_DIR="vec_evo_results_parallel/logs"
+PID_FILE="vec_evo_results_parallel/pids.txt"
 
 rm -f "$PID_FILE"
 mkdir -p "$POP_DIR" "$EVAL_DIR" "$HIST_DIR" "$SAVE_PATH" "$LOG_DIR"
