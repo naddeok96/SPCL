@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-PID_FILE="pids.txt"
+PID_FILE="/home/naddeok5/SPCL/vec_evo_results_parallel/pids.txt"
 if [ ! -f "$PID_FILE" ]; then
   echo "⚠️  PID file not found: $PID_FILE"
   exit 1

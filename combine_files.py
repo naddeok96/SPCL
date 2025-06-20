@@ -44,25 +44,25 @@ def combine_files(file_paths, output_file):
 if __name__ == "__main__":
     # Set the list of file paths (update as needed).
     file_paths = [
-        "utils.py",
-        "replay_buffer.py",
-        "rl_agent.py",
+        # "utils.py",
+        # "replay_buffer.py",
+        # "rl_agent.py",
         "curriculum.py",
         "curriculum_env.py",
-        "generate_dataset.py",
-        "off_policy_train.py",
-        "on_policy_train.py",
-        "config.yaml",
+        # "generate_dataset.py",
+        # "off_policy_train.py",
+        # "on_policy_train.py",
+        # "config.yaml",
 
-        "analyze_history.py",
+        # "analyze_history.py",
         "eval_population.py",
-        "init_population.py",
-        "evolve_population.py",
-        "merge_history.py",
+        # "init_population.py",
+        # "evolve_population.py",
+        # "merge_history.py",
         "population_utils.py",
-        "run_evolution.sh"
+        # "run_evolution.sh"
         
-        "experiment_for_vec_speed.py"
+        # "experiment_for_vec_speed.py"
     ]
     # Set the output file path.
     output_file = "all_in_one.py"

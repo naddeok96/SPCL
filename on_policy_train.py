@@ -34,12 +34,9 @@ def load_config(config_file):
         return yaml.safe_load(f)
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="config.yaml",
-                        help="Path to config file")
-    args = parser.parse_args()
+    config_path = "config_on_policy_seq.yaml"
 
-    config = load_config(args.config)
+    config = load_config(config_path)
 
     # Ensure base save path exists
     os.makedirs(config["paths"]["on_policy_dir"], exist_ok=True)
