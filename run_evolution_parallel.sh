@@ -6,9 +6,9 @@ echo "Activating venv at $VENV_PATH"
 # shellcheck source=/dev/null
 source "$VENV_PATH/bin/activate"
 
-CONFIG="config.yaml"
+CONFIG="config_parallel.yaml"
 GPUS=(2 3)
-RUNS_PER_GPU=1
+RUNS_PER_GPU=2
 POP_SIZE=124
 GENERATIONS=124
 NUM_MODELS=1000
