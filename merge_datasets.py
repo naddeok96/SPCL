@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 # ==== Configuration ====
 OUTPUT_PATH = "merged_history.pt"  # where to save the merged dataset
 HISTOGRAM_PATH = "merged_reward_hist.png"  # reward distribution plot
+FINAL_REWARD_HIST_PATH = "final_reward_hist.png"  # final reward distribution plot
 HISTORY_DIRS = [
     "vec_evo_results_parallel/history",
     "seq_evo_results/history",
@@ -70,6 +71,14 @@ def main() -> None:
     print(f"Reward range: {R.min().item():.2f} to {R.max().item():.2f}")
     print(f"Average reward: {R.mean().item():.2f}")
 
+    # Compute final rewards (rewards at episode termination).
+    final_rewards = R[D]
+    if not D[-1]:
+        final_rewards = torch.cat((final_rewards, R[-1:].clone()))
+    print(f"Final rewards collected: {final_rewards.numel()}")
+    print(f"Final reward range: {final_rewards.min().item():.2f} to {final_rewards.max().item():.2f}")
+    print(f"Average final reward: {final_rewards.mean().item():.2f}")
+
     # Plot reward distribution
     plt.figure()
     plt.hist(R.cpu().numpy(), bins=30, edgecolor="black", color="skyblue")
@@ -79,6 +88,16 @@ def main() -> None:
     plt.savefig(HISTOGRAM_PATH)
     plt.close()
     print(f"Saved reward histogram to {HISTOGRAM_PATH}")
+
+    # Plot final reward distribution
+    plt.figure()
+    plt.hist(final_rewards.cpu().numpy(), bins=30, edgecolor="black", color="salmon")
+    plt.title("Final Reward Distribution")
+    plt.xlabel("Reward")
+    plt.ylabel("Count")
+    plt.savefig(FINAL_REWARD_HIST_PATH)
+    plt.close()
+    print(f"Saved final reward histogram to {FINAL_REWARD_HIST_PATH}")
 
 
 if __name__ == "__main__":
