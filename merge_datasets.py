@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 OUTPUT_PATH = "merged_history.pt"  # where to save the merged dataset
 HISTOGRAM_PATH = "merged_reward_hist.png"  # reward distribution plot
 FINAL_REWARD_HIST_PATH = "final_reward_hist.png"  # final reward distribution plot
+THRESHOLD = 900  # reward threshold for additional statistics
+THRESHOLD_HIST_PATH = "reward_hist_over_threshold.png"  # histogram for rewards >= threshold
 HISTORY_DIRS = [
     "vec_evo_results_parallel/history",
     "seq_evo_results/history",
@@ -70,6 +72,10 @@ def main() -> None:
     print(f"Total episodes: {n_episodes}")
     print(f"Reward range: {R.min().item():.2f} to {R.max().item():.2f}")
     print(f"Average reward: {R.mean().item():.2f}")
+    # Statistics above threshold
+    above_mask = R >= THRESHOLD
+    n_above = int(above_mask.sum().item())
+    print(f"Transitions with reward >= {THRESHOLD}: {n_above}")
 
     # Compute final rewards (rewards at episode termination).
     final_rewards = R[D]
@@ -78,6 +84,20 @@ def main() -> None:
     print(f"Final rewards collected: {final_rewards.numel()}")
     print(f"Final reward range: {final_rewards.min().item():.2f} to {final_rewards.max().item():.2f}")
     print(f"Average final reward: {final_rewards.mean().item():.2f}")
+
+    # Histogram and stats for rewards above threshold
+    rewards_over_threshold = R[above_mask]
+    if rewards_over_threshold.numel() > 0:
+        plt.figure()
+        plt.hist(rewards_over_threshold.cpu().numpy(), bins=30, edgecolor="black", color="green")
+        plt.title(f"Rewards >= {THRESHOLD}")
+        plt.xlabel("Reward")
+        plt.ylabel("Count")
+        plt.savefig(THRESHOLD_HIST_PATH)
+        plt.close()
+        print(f"Saved threshold reward histogram to {THRESHOLD_HIST_PATH}")
+    else:
+        print(f"No rewards >= {THRESHOLD} to plot")
 
     # Plot reward distribution
     plt.figure()
