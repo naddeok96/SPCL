@@ -114,6 +114,73 @@ class PERBuffer(ReplayBuffer):
             self.priorities[i] = p
 
 
+class AugmentedReplayBuffer(ReplayBuffer):
+    """Replay buffer that keeps an elite subset of transitions permanently."""
+
+    def __init__(self, capacity, device, elite_fraction=0.1):
+        super().__init__(capacity, device)
+        self.elite_fraction = elite_fraction
+        self.elite_capacity = int(capacity * elite_fraction)
+        self.elite = []
+        self.random = []
+        self.random_pos = 0
+
+    def _push_elite(self, *transition):
+        if len(self.elite) < self.elite_capacity:
+            self.elite.append(transition)
+        else:
+            idx = self.random_pos % self.elite_capacity
+            self.elite[idx] = transition
+            self.random_pos = (self.random_pos + 1) % self.elite_capacity
+
+    def push(self, *args):
+        if len(self.random) < self.capacity - self.elite_capacity:
+            self.random.append(args)
+        else:
+            idx = self.position % (self.capacity - self.elite_capacity)
+            self.random[idx] = args
+        self.position = (self.position + 1) % (self.capacity - self.elite_capacity)
+
+    def sample(self, batch_size):
+        pool = self.elite + self.random
+        idxs = random.sample(range(len(pool)), batch_size)
+        batch = [pool[i] for i in idxs]
+        states, actions, rewards, next_states, dones = zip(*batch)
+        return (torch.stack(states),
+                torch.stack(actions),
+                torch.cat(rewards),
+                torch.stack(next_states),
+                torch.cat(dones).float())
+
+    def refresh_random(self, transitions):
+        self.random = []
+        self.position = 0
+        for tr in transitions[: max(0, self.capacity - self.elite_capacity)]:
+            self.push(*tr)
+
+    def __len__(self):
+        return len(self.elite) + len(self.random)
+
+
+def build_augmented_replay_buffer(elite_data, all_data, capacity, elite_fraction, device="cpu"):
+    """Create an :class:`AugmentedReplayBuffer` seeded with elite and random data."""
+    buffer = AugmentedReplayBuffer(capacity, device, elite_fraction)
+
+    def to_list(data):
+        return list(zip(data["states"], data["actions"], data["rewards"], data["next_states"], data["dones"]))
+
+    elite_trans = to_list(elite_data)
+    for t in elite_trans[:buffer.elite_capacity]:
+        s, a, r, ns, d = t
+        buffer._push_elite(s.to(device), a.to(device), torch.tensor([float(r)], device=device), ns.to(device), torch.tensor([float(d)], device=device))
+
+    others = [t for t in to_list(all_data) if t not in elite_trans]
+    random.shuffle(others)
+    buffer.refresh_random(others)
+
+    return buffer
+
+
 
 
 
