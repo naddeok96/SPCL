@@ -14,16 +14,15 @@ import yaml
 import torch
 import random
 import argparse
-import torch.nn as nn
-import torch.optim as optim
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from tqdm import trange, tqdm
 
 
 from rl_agent import DDPGAgent
-from replay_buffer import ReplayBuffer, PERBuffer
+from replay_buffer import build_augmented_replay_buffer
 from curriculum_env import CurriculumEnv
+from utils import select_top_percent, behavior_clone, tune_value_function
 
 def set_seed(seed: int):
     """Set random seeds for reproducibility."""
@@ -244,150 +243,39 @@ def main():
     rewards     = data["rewards"]
     next_states = data["next_states"]
     dones       = data["dones"]
-
-    # Populate the replay buffer.
-    if config["rl"].get("per_enabled", False):
-        replay_buffer = PERBuffer(
-            config["rl"]["buffer_size"],
-            config["device"],
-            alpha=config["rl"].get("per_alpha", 0.6),
-            beta=config["rl"].get("per_beta", 0.4),
-            epsilon=config["rl"].get("per_epsilon", 1e-6),
-            per_type=config["rl"].get("per_type", "proportional")
-        )
-    else:
-        replay_buffer = ReplayBuffer(config["rl"]["buffer_size"])
-
-    if config["rl"].get("seed_replay_buffer", False):
-        for i in tqdm(range(len(states)), desc="Seeding Replay Buffer"):
-            replay_buffer.push(states[i], actions[i], rewards[i], next_states[i], dones[i])
-        print(f"Seeded {len(replay_buffer)} transitions into the replay buffer.")
-
-    print(f"Loaded {len(replay_buffer)} transitions into the replay buffer.")
+    dataset = {
+        "states": states,
+        "actions": actions,
+        "rewards": rewards,
+        "next_states": next_states,
+        "dones": dones,
+    }
 
     env = CurriculumEnv(config)
     obs_dim = len(env.reset())
     action_dim = 5
     agent = DDPGAgent(obs_dim, action_dim, config)
 
+    top_percent = config["rl"].get("bc_top_percent", 10)
+    elite_data = select_top_percent(dataset, top_percent)
+
+    if config["rl"].get("use_behavioral_cloning", False):
+        behavior_clone(agent.actor, elite_data)
+
+    from torch.utils.data import DataLoader, TensorDataset
+    ds = TensorDataset(states, actions, rewards, next_states, dones)
+    loader = DataLoader(ds, batch_size=config["rl"]["batch_size"], shuffle=True)
+
+    tune_value_function(agent.actor, agent.critic1, loader, config["rl"])
+    tune_value_function(agent.actor, agent.critic2, loader, config["rl"])
+
+    elite_fraction = top_percent / 100.0
+    replay_buffer = build_augmented_replay_buffer(elite_data, dataset, config["rl"]["buffer_size"], elite_fraction, config["device"])
+
     probe_batch_size = 256
     perm = torch.randperm(len(states))
     idxs = perm[:probe_batch_size]
     variance_states_tensor = states[idxs].to(agent.device).float()
-    
-    # Behavioral cloning pretrain
-    if config["rl"].get("use_behavioral_cloning", False):
-        print("Starting BC pretrain on top 10% reward transitions…")
-
-        # 1) Load your saved EA transitions
-        ea    = torch.load(dataset_path, map_location="cpu")
-        ea_states  = ea["states"]   # shape (N, state_dim)
-        ea_actions = ea["actions"]  # shape (N, action_dim)
-        ea_rewards = ea["rewards"]  # shape (N,)
-
-        # 2) Compute threshold for top 25%
-        threshold = torch.quantile(ea_rewards, 0.75)
-        pos_pool = (ea_rewards >= threshold).nonzero(as_tuple=True)[0]
-        if pos_pool.numel() == 0:
-            raise ValueError(f"No transitions above the 90th percentile (thr={threshold:.4f})")
-
-        # 3) Loss function & scheduler (pure BC)
-        bc_loss_fn = nn.SmoothL1Loss()
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            agent.actor_optimizer,
-            mode='min',
-            factor=0.9,
-            patience=10000,
-            verbose=True
-        )
-
-        # 4) BC loop
-        iters = config["rl"].get("pretrain_bc_iters", 1000)
-        batch = config["rl"]["batch_size"]
-        bc_losses = []
-        for _ in trange(iters, desc="BC Pretrain"):
-            # sample _batch_ indices uniformly from the top‐10% pool
-            idx_batch = pos_pool[torch.randint(0, len(pos_pool), (batch,))]
-            s_batch   = ea_states[idx_batch].to(agent.device).float()
-            a_batch   = ea_actions[idx_batch].to(agent.device).float()
-
-            # forward & loss
-            pred = agent.actor(s_batch)
-            loss = bc_loss_fn(pred, a_batch)
-
-            # update actor
-            agent.actor_optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(agent.actor.parameters(), max_norm=1.0)
-            agent.actor_optimizer.step()
-            scheduler.step(loss)
-
-            bc_losses.append(loss.item())
-
-        # 5) Save actor and plot BC loss progression
-        bc_actor_path = os.path.join(results_dir, "actor_after_bc.pth")
-        torch.save(agent.actor.state_dict(), bc_actor_path)
-        print(f"Saved actor (post-BC) → {bc_actor_path}")
-
-        plt.figure()
-        plt.plot(bc_losses)
-        plt.title("Behavior Cloning Loss Progression")
-        plt.xlabel("BC Iteration")
-        plt.ylabel("Loss")
-        plt.grid(True)
-        plt.savefig(os.path.join(results_dir, "bc_loss_progression.png"))
-        plt.close()
-
-        # 6) Mixing‐ratio distributions: EA vs. actor predictions
-        ea_tensor = ea_states.to(agent.device).float()
-        with torch.no_grad():
-            pred_actions = agent.actor(ea_tensor).cpu()
-
-        for idx, name in zip([1,2,3], ["Easy","Med","Hard"]):
-            plt.figure()
-            plt.hist(ea_actions[:, idx].cpu().numpy(), bins=30, alpha=0.5,
-                    label="EA "+name, density=True)
-            plt.hist(pred_actions[:, idx].numpy(), bins=30, alpha=0.5,
-                    label="Actor "+name, density=True)
-            plt.title(f"Mixing Ratio – {name}")
-            plt.xlabel("Ratio Value")
-            plt.ylabel("Density")
-            plt.legend()
-            plt.savefig(os.path.join(results_dir, f"bc_mixratio_{name.lower()}.png"))
-            plt.close()
-            
-            
-    if config["rl"].get("pretrain_critic_offpolicy", True):
-        print("Pretraining critic off‑policy…")
-        pre_iters = config["rl"].get("pretrain_critic_iters", 10000)
-        critic1_pre_losses = []
-        critic2_pre_losses = []
-        for _ in trange(pre_iters, desc="Critic Pretrain"):
-            if len(replay_buffer) >= config["rl"]["batch_size"]:
-                # only update critic
-                metrics = agent.critic_update_only(replay_buffer, config["rl"]["batch_size"])
-                critic1_pre_losses.append(metrics["critic1_loss"])
-                critic2_pre_losses.append(metrics["critic2_loss"])
-        
-         # Save both critics
-        critic1_pre_path = os.path.join(results_dir, "critic1_after_pretrain.pth")
-        critic2_pre_path = os.path.join(results_dir, "critic2_after_pretrain.pth")
-        torch.save(agent.critic1.state_dict(), critic1_pre_path)
-        torch.save(agent.critic2.state_dict(), critic2_pre_path)
-        print(f"Saved critic1 → {critic1_pre_path}")
-        print(f"Saved critic2 → {critic2_pre_path}")
-        
-        # Plot both losses
-        plt.figure()
-        plt.plot(critic1_pre_losses, label="Critic1 Loss")
-        plt.plot(critic2_pre_losses, label="Critic2 Loss")
-        plt.title("Critic Off‑Policy Pretrain Losses")
-        plt.xlabel("Iteration")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(results_dir, "critic_pretrain_losses.png"))
-        plt.close()
 
     # Prepare for checkpointing.
     num_updates = config["rl"].get("off_policy_updates", int(1e6))
