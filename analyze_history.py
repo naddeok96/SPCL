@@ -280,7 +280,7 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
     usage  = [episode['actions'][i][4] for i in range(num_phases)]
     mixrs  = [episode['actions'][i][1:4] for i in range(num_phases)]
     rews   = [episode['rewards'][i]        for i in range(num_phases)]
-    if rews: rews[-1] /= 10.0
+    # if rews: rews[-1] /= 10.0
 
     # Learning rate
     ax_lr = fig.add_subplot(gs_bot[0, 0])
