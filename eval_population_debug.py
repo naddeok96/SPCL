@@ -14,8 +14,8 @@ from curriculum_env import CurriculumEnv
 
 def main():
     # ==== Hard-coded configuration ====
-    config_path    = "config_parallel.yaml"    # path to your config YAML
-    pop_file       = "vec_evo_results_parallel/populations/pop_gen_0.pt"  # .pt containing 'population'
+    config_path    = "config_debug.yaml"    # path to your config YAML
+    pop_file       = "debug_population/pop_gen_0.pt"  # .pt containing 'population'
     start_idx      = 0                # first candidate index
     num_candidates = 4              # how many candidates to evaluate
     out_file       = "temp4/eval_slice.pt"  # where to write this slice's .pt
