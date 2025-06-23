@@ -192,3 +192,8 @@ MNIST/
 logs_mnist_vec/
 saved_model_checkpoints/
 evo_results/
+config_debug.yaml
+debug_population/
+fix_vec_episodes.py
+generate_debug_pop.sh
+vec_evo_results_parallel/
