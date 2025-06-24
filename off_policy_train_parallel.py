@@ -1,0 +1,476 @@
+"""Parallel off-policy training.
+
+This script mirrors :mod:`off_policy_train` but is intended for datasets
+generated via the parallel evolutionary pipeline.  The training procedure is
+identical to ``off_policy_train.py`` – the only differences are the default
+configuration file and output directory.
+"""
+
+import os
+import yaml
+import torch
+import random
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from tqdm import trange, tqdm
+
+
+from rl_agent import DDPGAgent
+from replay_buffer import build_augmented_replay_buffer
+from curriculum_env import CurriculumEnv
+from utils import select_top_percent, behavior_clone, tune_value_function
+
+def set_seed(seed: int):
+    """Set random seeds for reproducibility."""
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+def load_config(config_file):
+    with open(config_file, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+# ----- Episode Plotting Functions (adapted from analyze_history.py) -----
+
+def breakdown_state(state, num_bins):
+    """
+    Breaks down the state vector into its constituent parts.
+    Assumes the following layout:
+      - Indices 0:num_bins                  : Easy Correct Histogram
+      - Indices num_bins:2*num_bins         : Easy Incorrect Histogram
+      - Indices 2*num_bins:3*num_bins       : Medium Correct Histogram
+      - Indices 3*num_bins:4*num_bins       : Medium Incorrect Histogram
+      - Indices 4*num_bins:5*num_bins       : Hard Correct Histogram
+      - Indices 5*num_bins:6*num_bins       : Hard Incorrect Histogram
+      - Indices 6*num_bins:6*num_bins+3     : Relative dataset sizes (3 values)
+      - Indices 6*num_bins+3:6*num_bins+5     : Extra state features (2 values)
+    Total length = 6*num_bins + 5.
+    """
+    if not torch.is_tensor(state):
+        state = torch.tensor(state, dtype=torch.float32)
+        
+    breakdown = {}
+    breakdown['easy_correct_hist'] = state[0:num_bins].tolist()
+    breakdown['easy_incorrect_hist'] = state[num_bins:2*num_bins].tolist()
+    breakdown['medium_correct_hist'] = state[2*num_bins:3*num_bins].tolist()
+    breakdown['medium_incorrect_hist'] = state[3*num_bins:4*num_bins].tolist()
+    breakdown['hard_correct_hist'] = state[4*num_bins:5*num_bins].tolist()
+    breakdown['hard_incorrect_hist'] = state[5*num_bins:6*num_bins].tolist()
+    breakdown['relative_sizes'] = state[6*num_bins:6*num_bins+3].tolist()
+    breakdown['extra'] = state[6*num_bins+3:6*num_bins+5].tolist()
+    return breakdown
+
+def breakdown_action(action):
+    """
+    Breaks down the 5-dimensional action vector into:
+      - Learning rate: action[0]
+      - Mixing ratios for (Easy, Medium, Hard): action[1:4]
+      - Sample usage fraction: action[4]
+    """
+    if not torch.is_tensor(action):
+        action = torch.tensor(action, dtype=torch.float32)
+        
+    breakdown = {}
+    breakdown['learning_rate'] = action[0].tolist()
+    breakdown['mixing_ratios'] = action[1:4].tolist()
+    breakdown['sample_usage_fraction'] = action[4].tolist()
+    return breakdown
+
+def plot_episode_figure(episode, group_name, num_bins, output_dir):
+    """
+    For a given episode, creates a detailed figure with:
+      - TOP BLOCK: For each phase (transition), a row of 4 subplots:
+            * Column 0: Combined "Easy" loss histogram (green for correct, red for incorrect).
+            * Column 1: Combined "Medium" loss histogram.
+            * Column 2: Combined "Hard" loss histogram.
+            * Column 3: State Info bar chart (relative sizes and extra features).
+         Each row is annotated with that phase’s reward.
+      - BOTTOM BLOCK: Aggregated evolution across phases with 4 subplots:
+            1. Learning Rate evolution.
+            2. Sample Usage evolution.
+            3. Mixing Ratios as a stacked bar plot (one bar per phase).
+            4. Reward evolution (with the last phase reward divided by 10).
+    The resulting figure is saved to the output directory.
+    """
+    states  = episode['states']
+    actions = episode['actions']
+    rewards = episode['rewards']
+    num_phases = len(states)
+    
+    fig = plt.figure(figsize=(20, num_phases * 3 + 3))
+    
+    # TOP BLOCK: grid for each phase.
+    gs_top = gridspec.GridSpec(nrows=num_phases, ncols=4, top=0.95, bottom=0.55, 
+                               wspace=0.4, hspace=0.6, height_ratios=[1] * num_phases)
+    # BOTTOM BLOCK: 1 row, 4 columns.
+    gs_bot = gridspec.GridSpec(nrows=1, ncols=4, top=0.5, bottom=0.05, wspace=0.5)
+    
+    # TOP BLOCK: For each phase, plot state breakdown.
+    for i in range(num_phases):
+        s = states[i]
+        r = rewards[i]
+        sb = breakdown_state(s, num_bins)
+        
+        x = list(range(num_bins))
+        w = 0.4
+        x_left  = [xi - w/2 for xi in x]
+        x_right = [xi + w/2 for xi in x]
+        
+        # Easy losses
+        ax0 = fig.add_subplot(gs_top[i,0])
+        ax0.bar(x_left,  sb['easy_correct_hist'],   w, label='Correct')
+        ax0.bar(x_right, sb['easy_incorrect_hist'], w, color='red', label='Incorrect')
+        if i == 0:
+            ax0.set_title("Easy Loss Hist", fontsize=10)
+            ax0.legend(fontsize=8)
+        ax0.set_ylabel(f"P{i+1}\nR:{r:.2f}", fontsize=9)
+        ax0.tick_params(labelsize=8)
+
+        # Medium losses
+        ax1 = fig.add_subplot(gs_top[i,1])
+        ax1.bar(x_left,  sb['medium_correct_hist'],   w)
+        ax1.bar(x_right, sb['medium_incorrect_hist'], w, color='red')
+        if i == 0:
+            ax1.set_title("Medium Loss Hist", fontsize=10)
+        ax1.tick_params(labelsize=8)
+
+        # Hard losses
+        ax2 = fig.add_subplot(gs_top[i,2])
+        ax2.bar(x_left,  sb['hard_correct_hist'],   w)
+        ax2.bar(x_right, sb['hard_incorrect_hist'], w, color='red')
+        if i == 0:
+            ax2.set_title("Hard Loss Hist", fontsize=10)
+        ax2.tick_params(labelsize=8)
+
+        # State info
+        ax3 = fig.add_subplot(gs_top[i,3])
+        info = sb['relative_sizes'] + sb['extra']
+        ax3.bar(list(range(5)), info,
+                color=['blue','orange','purple','cyan','magenta'])
+        ax3.set_xticks(list(range(5)))
+        ax3.set_xticklabels(['Easy','Med','Hard','PhaseRatio','AvailRatio'],
+                            rotation=45, fontsize=8)
+        if i == 0:
+            ax3.set_title("State Info", fontsize=10)
+        ax3.tick_params(labelsize=8)
+
+    # Bottom block: aggregated view
+    phases      = list(range(1, num_phases+1))
+    lrs         = [actions[i][0] for i in range(num_phases)]
+    usage       = [actions[i][4] for i in range(num_phases)]
+    mixratios   = [actions[i][1:4] for i in range(num_phases)]
+    rews        = [float(r) for r in rewards]
+    if rews:
+        rews[-1] = rews[-1] / 10.0
+
+    # Learning rate
+    ax_lr = fig.add_subplot(gs_bot[0,0])
+    ax_lr.plot(phases, lrs, marker='o')
+    ax_lr.set_title("Learning Rate", fontsize=10)
+    ax_lr.set_xlabel("Phase", fontsize=9)
+    ax_lr.set_ylabel("LR", fontsize=9)
+    ax_lr.set_xticks(phases)
+
+    # Sample usage
+    ax_us = fig.add_subplot(gs_bot[0,1])
+    ax_us.plot(phases, usage, marker='o')
+    ax_us.set_title("Sample Usage", fontsize=10)
+    ax_us.set_xlabel("Phase", fontsize=9)
+    ax_us.set_ylabel("Usage", fontsize=9)
+    ax_us.set_xticks(phases)
+
+    # Mixing ratios
+    ax_mx = fig.add_subplot(gs_bot[0,2])
+    bar_w = 0.6
+    for idx, mr in enumerate(mixratios):
+        btm = 0.0
+        ax_mx.bar(idx, mr[0], bottom=btm, width=bar_w, label='Easy' if idx==0 else "")
+        btm += mr[0]
+        ax_mx.bar(idx, mr[1], bottom=btm, width=bar_w, label='Med' if idx==0 else "")
+        btm += mr[1]
+        ax_mx.bar(idx, mr[2], bottom=btm, width=bar_w, label='Hard' if idx==0 else "")
+    ax_mx.set_xticks(list(range(num_phases)))
+    ax_mx.set_xticklabels([f"P{p}" for p in phases])
+    ax_mx.set_title("Mixing Ratios", fontsize=10)
+    ax_mx.set_xlabel("Phase", fontsize=9)
+    ax_mx.set_ylabel("Ratio", fontsize=9)
+    ax_mx.legend(fontsize=8)
+
+    # Reward evolution
+    ax_rw = fig.add_subplot(gs_bot[0,3])
+    ax_rw.plot(phases, rews, marker='o')
+    ax_rw.set_title("Reward", fontsize=10)
+    ax_rw.set_xlabel("Phase", fontsize=9)
+    ax_rw.set_ylabel("Reward", fontsize=9)
+    ax_rw.set_xticks(phases)
+
+    plt.tight_layout()
+    fname = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed.png")
+    plt.savefig(fname)
+    plt.close(fig)
+    print(f"Saved detailed figure for {group_name} episode {episode['index']} to {fname}")
+
+# ----- Main Training and Evaluation -----
+
+def main():
+    # ``config_off_policy_vec.yaml`` mirrors ``config_off_policy_seq.yaml`` but
+    # is meant for the dataset produced by the parallel evolutionary runs.
+    config_path = "config_off_policy_vec.yaml"
+    config = load_config(config_path)
+
+    set_seed(42)
+
+    # Create a separate directory for checkpoints/plots.
+    results_dir = os.path.join("results", "off_policy_parallel")
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Load dataset (must be a .pt saved via torch.save)
+    dataset_path = config["paths"]["pretrain_path"]
+    data = torch.load(dataset_path, map_location="cpu")
+    states      = data["states"]
+    actions     = data["actions"]
+    rewards     = data["rewards"]
+    next_states = data["next_states"]
+    dones       = data["dones"]
+    dataset = {
+        "states": states,
+        "actions": actions,
+        "rewards": rewards,
+        "next_states": next_states,
+        "dones": dones,
+    }
+
+    env = CurriculumEnv(config)
+    obs_dim = len(env.reset())
+    action_dim = 5
+    agent = DDPGAgent(obs_dim, action_dim, config)
+
+    top_percent = config["rl"].get("bc_top_percent", 10)
+    elite_data = select_top_percent(dataset, top_percent)
+
+    if config["rl"].get("use_behavioral_cloning", False):
+        behavior_clone(agent.actor, elite_data)
+
+    from torch.utils.data import DataLoader, TensorDataset
+    ds = TensorDataset(states, actions, rewards, next_states, dones)
+    loader = DataLoader(ds, batch_size=config["rl"]["batch_size"], shuffle=True)
+
+    tune_value_function(agent.actor, agent.critic1, loader, config["rl"])
+    tune_value_function(agent.actor, agent.critic2, loader, config["rl"])
+
+    elite_fraction = top_percent / 100.0
+    replay_buffer = build_augmented_replay_buffer(elite_data, dataset, config["rl"]["buffer_size"], elite_fraction, config["device"])
+
+    probe_batch_size = 256
+    perm = torch.randperm(len(states))
+    idxs = perm[:probe_batch_size]
+    variance_states_tensor = states[idxs].to(agent.device).float()
+
+    # Prepare for checkpointing.
+    num_updates = config["rl"].get("off_policy_updates", int(1e6))
+    checkpoint_interval = int(num_updates * 0.2)
+    if checkpoint_interval == 0:
+        checkpoint_interval = 1
+
+    # Lists for tracking metrics over training.
+    actor_losses = []
+    critic1_losses = []
+    critic2_losses = []
+    reward_progress = []
+    eval_updates = []
+    num_bins = config["observation"]["num_bins"]
+    action_var_history = []   
+    update_steps      = []
+
+    # Training loop.
+    for update in trange(num_updates, desc="Off‑policy Training"):
+        if len(replay_buffer) >= config["rl"]["batch_size"]:
+            metrics = agent.update(replay_buffer, config["rl"]["batch_size"])
+            if metrics is not None:
+                actor_losses.append(metrics["actor_loss"])
+                critic1_losses.append(metrics["critic1_loss"])
+                critic2_losses.append(metrics["critic2_loss"])
+        with torch.no_grad():
+            pred_actions = agent.actor(variance_states_tensor).cpu() # (256,5)
+        var = torch.var(pred_actions, dim=0, unbiased=False)  # length‑5 vector
+        action_var_history.append(var.tolist())
+        update_steps.append(update)
+        
+        # Every checkpoint_interval (5% of training), run a full evaluation episode
+        # and save all plots and model checkpoint.
+        if update % checkpoint_interval == 0:
+            eval_states = []
+            eval_actions = []
+            eval_rewards = []
+            obs_eval = env.reset()
+            done = False
+            while not done:
+                action_eval = agent.select_action(obs_eval, noise_enable=False)
+                eval_states.append(obs_eval)
+                eval_actions.append(action_eval)
+                obs_eval, reward, done = env.step(action_eval)
+                eval_rewards.append(reward)
+            total_reward = sum(eval_rewards)
+            reward_progress.append(total_reward)
+            eval_updates.append(update)
+            print(f"Checkpoint at update {update}/{num_updates} - Full episode evaluation reward: {total_reward}")
+            
+            # Build an evaluation episode dictionary.
+            eval_episode = {
+                "index": update,
+                "states": eval_states,
+                "actions": eval_actions,
+                "rewards": eval_rewards,
+                "total_reward": total_reward,
+                "episode_length": len(eval_states)
+            }
+            
+            # Save detailed episode plot.
+            plot_episode_figure(eval_episode, f"eval_{update}", num_bins, results_dir)
+            
+            # Save loss plots.
+            fig_loss, (ax_actor, ax_critic) = plt.subplots(2, 1, figsize=(8, 10))
+            ax_actor.plot(actor_losses, color='blue')
+            ax_actor.set_title("Actor Loss Progression")
+            ax_actor.set_xlabel("Update Steps")
+            ax_actor.set_ylabel("Loss")
+            ax_critic.plot(critic1_losses, label="Critic1")
+            ax_critic.plot(critic2_losses, label="Critic2")
+            ax_critic.set_title("Critic Loss Progression")
+            ax_critic.set_xlabel("Update Steps")
+            ax_critic.set_ylabel("Loss")
+            ax_critic.legend()
+            checkpoint_loss_path = os.path.join(results_dir, f"training_losses_{update}.png")
+            fig_loss.tight_layout()
+            fig_loss.savefig(checkpoint_loss_path)
+            plt.close(fig_loss)
+            
+            # Save reward progression plot.
+            plt.figure()
+            plt.plot(eval_updates, reward_progress, marker='o')
+            plt.xlabel("Update Steps")
+            plt.ylabel("Reward")
+            plt.title("Periodic Reward Evaluation")
+            checkpoint_reward_path = os.path.join(results_dir, f"reward_progress_{update}.png")
+            plt.savefig(checkpoint_reward_path)
+            plt.close()
+            
+            # Save model checkpoint.
+            actor_ckpt = os.path.join(results_dir, f"off_policy_actor_{update}.pth")
+            torch.save(agent.actor.state_dict(), actor_ckpt)
+            print(f"Saved actor → {actor_ckpt}")
+            crit1_ckpt = os.path.join(results_dir, f"off_policy_critic1_{update}.pth")
+            crit2_ckpt = os.path.join(results_dir, f"off_policy_critic2_{update}.pth")
+            torch.save(agent.critic1.state_dict(), crit1_ckpt)
+            torch.save(agent.critic2.state_dict(), crit2_ckpt)
+            print(f"Saved critic1 → {crit1_ckpt}")
+            print(f"Saved critic2 → {crit2_ckpt}")
+
+            # plot action‐component variances
+            action_var_array = torch.tensor(action_var_history)  # shape (steps,5)
+            names = ["learning_rate","mix_easy","mix_med","mix_hard","sample_usage"]
+
+            # 5‐panel subplot, one row per action component
+            fig, axs = plt.subplots(nrows=5, ncols=1, figsize=(8,12), sharex=True)
+            for idx, name in enumerate(names):
+                axs[idx].plot(update_steps, action_var_array[:,idx].numpy())
+                axs[idx].set_ylabel("Var")
+                axs[idx].set_title(name)
+                axs[idx].grid(True)
+
+            # only bottom panel needs an x‐label
+            axs[-1].set_xlabel("Update Step")
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(results_dir, "action_variance.png"))
+            plt.close()
+                
+    # After training, run one final full evaluation episode.
+    eval_states = []
+    eval_actions = []
+    eval_rewards = []
+    obs_eval = env.reset()
+    done = False
+    while not done:
+        action_eval = agent.select_action(obs_eval, noise_enable=False)
+        eval_states.append(obs_eval)
+        eval_actions.append(action_eval)
+        obs_eval, reward, done = env.step(action_eval)
+        eval_rewards.append(reward)
+    total_reward = sum(eval_rewards)
+    print(f"Final evaluation episode total reward: {total_reward}")
+    
+    eval_episode = {
+        "index": num_updates,
+        "states": eval_states,
+        "actions": eval_actions,
+        "rewards": eval_rewards,
+        "total_reward": total_reward,
+        "episode_length": len(eval_states)
+    }
+    plot_episode_figure(eval_episode, "final_eval", num_bins, results_dir)
+    print(f"Saved final evaluation episode plot in {results_dir}")
+    
+    # Final actor save
+    final_actor = os.path.join(results_dir, "off_policy_actor_model_final.pth")
+    torch.save(agent.actor.state_dict(), final_actor)
+
+    final_critic1 = os.path.join(results_dir, "off_policy_critic1_model_final.pth")
+    final_critic2 = os.path.join(results_dir, "off_policy_critic2_model_final.pth")
+
+    torch.save(agent.critic1.state_dict(), final_critic1)
+    torch.save(agent.critic2.state_dict(), final_critic2)
+
+    print(f"Saved final actor → {final_actor}")
+    print(f"Saved final critic 1 → {final_critic1}")
+    print(f"Saved final critic 2 → {final_critic2}")
+    
+    # Plot final actor and critic loss progression on separate subplots.
+    fig_loss, (ax_actor, ax_critic) = plt.subplots(2, 1, figsize=(8, 10))
+    ax_actor.plot(actor_losses, color='blue')
+    ax_actor.set_title("Actor Loss Progression")
+    ax_actor.set_xlabel("Update Steps")
+    ax_actor.set_ylabel("Loss")
+    ax_critic.plot(critic1_losses, color='red', label="Critic 1")
+    ax_critic.plot(critic2_losses, color='green', label="Critic 2")
+    ax_critic.set_title("Critic Loss Progression")
+    ax_critic.set_xlabel("Update Steps")
+    ax_critic.set_ylabel("Loss")
+    ax_critic.legend()
+    final_loss_plot = os.path.join(results_dir, "training_losses_final.png")
+    fig_loss.tight_layout()
+    fig_loss.savefig(final_loss_plot)
+    plt.close(fig_loss)
+    print(f"Final training loss plot saved to {final_loss_plot}")
+    
+    # Plot final reward progression.
+    plt.figure()
+    plt.plot(eval_updates, reward_progress, marker='o')
+    plt.xlabel("Update Steps")
+    plt.ylabel("Reward")
+    plt.title("Periodic Reward Evaluation")
+    final_reward_plot = os.path.join(results_dir, "reward_progress_final.png")
+    plt.savefig(final_reward_plot)
+    plt.close()
+    print(f"Final reward progression plot saved to {final_reward_plot}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
