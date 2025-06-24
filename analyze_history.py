@@ -36,7 +36,7 @@ If no arguments are given, it defaults to:
 
 import os
 import torch
-import argparse
+import pickle
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
@@ -74,6 +74,9 @@ def group_episodes_by_done(states, actions, rewards, dones):
             current_states = []
             current_actions = []
             current_rewards = []
+            
+            if episode_counter >= 100:
+                break
     # Group any remaining transitions as an incomplete episode.
     if current_states:
         aggregated_reward = sum(float(x) for x in current_rewards)
@@ -326,43 +329,40 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
     plt.close(fig)
     print(f"Saved fun detailed figure for {group_name} episode {episode['index']} to {out_f}")
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Analyze training history from pt file with detailed figures."
-    )
-    parser.add_argument(
-        "--pt_file", type=str,
-        default="results/curriculum_rl/evolutionary_dataset.pt",
-        help="Path to the pt file saved by generate_dataset.py"
-    )
-    parser.add_argument(
-        "--num_bins", type=int, default=16,
-        help="Number of bins used in the loss histograms in the state vector"
-    )
-    parser.add_argument(
-        "--output_dir", type=str, default="history",
-        help="Directory to save analysis outputs (default: history)"
-    )
-    args = parser.parse_args()
+def save_episodes(episodes, path='episodes.pkl'):
+    with open(path, 'wb') as f:
+        pickle.dump(episodes, f)
 
-    output_dir = args.output_dir
+def load_episodes(path='episodes.pkl'):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+    
+def main():
+    pt_file = "vec_evo_results_parallel/fixed_history.pt" # "seq_evo_results/history/history_gen52.pt" # 
+    # pkl_file = "vec_evo_results_parallel/episodes.pkl"
+    output_dir = "temp_fixed2"
+    num_bins = 16
+
     os.makedirs(output_dir, exist_ok=True)
 
     # Load data.
-    states, actions, rewards, dones = load_data(args.pt_file)
-    print(f"Loaded {states.shape[0]} transitions from {args.pt_file}")
+    states, actions, rewards, dones = load_data(pt_file)
+    print(f"Loaded {states.shape[0]} transitions from {pt_file}")
 
     # Group transitions into episodes using the done flag.
     episodes = group_episodes_by_done(states, actions, rewards, dones)
     print(f"Grouped into {len(episodes)} episodes based on done flags.")
+    
+    # save_episodes(episodes, path=pkl_file)
+    # episodes = load_episodes(path=pkl_file)
 
     # Select low, median, and high groups.
     low_eps, median_eps, high_eps = select_episode_groups(episodes)
 
     # Save text summaries.
-    save_episode_details(low_eps, "low", args.num_bins, output_dir)
-    save_episode_details(median_eps, "median", args.num_bins, output_dir)
-    save_episode_details(high_eps, "high", args.num_bins, output_dir)
+    save_episode_details(low_eps, "low", num_bins, output_dir)
+    save_episode_details(median_eps, "median", num_bins, output_dir)
+    save_episode_details(high_eps, "high", num_bins, output_dir)
 
     # Plot reward distribution for all episodes.
     plot_reward_distribution(episodes, output_dir)
@@ -370,7 +370,7 @@ def main():
     # Generate detailed figures for each chosen episode.
     for group_name, group_eps in zip(["low", "median", "high"], [low_eps, median_eps, high_eps]):
         for ep in group_eps:
-            plot_episode_figure(ep, group_name, args.num_bins, output_dir)
+            plot_episode_figure(ep, group_name, num_bins, output_dir)
 
     print("Analysis complete.")
 

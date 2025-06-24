@@ -18,8 +18,8 @@ def main():
     output = args.output
     history_dir= args.history_dir
 
-    # output = "temp/temp.pt"
-    # history_dir = "eval_parts/"
+    # output = "/data/naddeok/spcl/seq_history.pt"
+    # history_dir = "seq_evo_results/history/"
 
     basename = os.path.basename(output)
     m = re.match(r".*gen(\d+)\.pt$", basename)

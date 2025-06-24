@@ -12,14 +12,14 @@ import torch
 import matplotlib.pyplot as plt
 
 # ==== Configuration ====
-OUTPUT_PATH = "temp/merged_history.pt"  # where to save the merged dataset
-HISTOGRAM_PATH = "temp/merged_reward_hist.png"  # reward distribution plot
-FINAL_REWARD_HIST_PATH = "temp/final_reward_hist.png"  # final reward distribution plot
-THRESHOLD = 900  # reward threshold for additional statistics
-THRESHOLD_HIST_PATH = "temp/reward_hist_over_threshold.png"  # histogram for rewards >= threshold
+OUTPUT_PATH = "/data/naddeok/spcl/merged_history.pt"  # where to save the merged dataset
+HISTOGRAM_PATH = "/data/naddeok/spcl/merged_reward_hist.png"  # reward distribution plot
+FINAL_REWARD_HIST_PATH = "/data/naddeok/spcl/final_reward_hist.png"  # final reward distribution plot
+THRESHOLD = 800  # reward threshold for additional statistics
+THRESHOLD_HIST_PATH = "/data/naddeok/spcl/reward_hist_over_threshold.png"  # histogram for rewards >= threshold
 HISTORY_DIRS = [
-    "vec_evo_results_parallel/history",
     "seq_evo_results/history",
+    "vec_evo_results_parallel/fixed_history",
 ]
 
 

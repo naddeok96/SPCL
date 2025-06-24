@@ -117,7 +117,7 @@ def reorganize_parallel_history(data: dict, num_models: int) -> dict:
 
                 new_s.append(S[idx])
                 new_a.append(A[idx])
-                new_r.append(R[idx])
+                new_r.append(10*R[idx] if dflag else R[idx])
                 new_ns.append(NS[idx])
                 new_d.append(p == steps - 1)
 
