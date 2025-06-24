@@ -17,6 +17,8 @@ HISTOGRAM_PATH = "/data/naddeok/spcl/merged_reward_hist.png"  # reward distribut
 FINAL_REWARD_HIST_PATH = "/data/naddeok/spcl/final_reward_hist.png"  # final reward distribution plot
 THRESHOLD = 800  # reward threshold for additional statistics
 THRESHOLD_HIST_PATH = "/data/naddeok/spcl/reward_hist_over_threshold.png"  # histogram for rewards >= threshold
+PERCENTILE = 90  # percentile for percentage-based thresholding (top 10%)
+PERCENTILE_HIST_PATH = "/data/naddeok/spcl/reward_hist_top_percentile.png"  # histogram for top percentile rewards
 HISTORY_DIRS = [
     "seq_evo_results/history",
     "vec_evo_results_parallel/fixed_history",
@@ -85,6 +87,14 @@ def main() -> None:
     print(f"Final reward range: {final_rewards.min().item():.2f} to {final_rewards.max().item():.2f}")
     print(f"Average final reward: {final_rewards.mean().item():.2f}")
 
+    # Statistics based on top percentile of rewards
+    percentile_value = torch.quantile(R.float(), PERCENTILE / 100)
+    percentile_mask = R >= percentile_value
+    n_percentile = int(percentile_mask.sum().item())
+    print(
+        f"Transitions in top {100 - PERCENTILE}% (>= {percentile_value.item():.2f}): {n_percentile}"
+    )
+
     # Histogram and stats for rewards above threshold
     rewards_over_threshold = R[above_mask]
     if rewards_over_threshold.numel() > 0:
@@ -98,6 +108,20 @@ def main() -> None:
         print(f"Saved threshold reward histogram to {THRESHOLD_HIST_PATH}")
     else:
         print(f"No rewards >= {THRESHOLD} to plot")
+
+    # Histogram for top percentile rewards
+    rewards_top_percentile = R[percentile_mask]
+    if rewards_top_percentile.numel() > 0:
+        plt.figure()
+        plt.hist(rewards_top_percentile.cpu().numpy(), bins=30, edgecolor="black", color="purple")
+        plt.title(f"Top {100 - PERCENTILE}% Rewards")
+        plt.xlabel("Reward")
+        plt.ylabel("Count")
+        plt.savefig(PERCENTILE_HIST_PATH)
+        plt.close()
+        print(f"Saved percentile reward histogram to {PERCENTILE_HIST_PATH}")
+    else:
+        print(f"No rewards in top {100 - PERCENTILE}% to plot")
 
     # Plot reward distribution
     plt.figure()
