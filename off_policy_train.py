@@ -219,14 +219,8 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
 # ----- Main Training and Evaluation -----
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", "-c",
-        default="config.yaml",
-        help="path to your config YAML"
-    )
-    args   = parser.parse_args()
-    config = load_config(args.config)
+    config_path = "config_off_policy_seq.yaml"
+    config = load_config(config_path)
 
     # config = load_config("config.yaml")
     set_seed(42)
