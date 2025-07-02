@@ -283,7 +283,7 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
     usage  = [episode['actions'][i][4] for i in range(num_phases)]
     mixrs  = [episode['actions'][i][1:4] for i in range(num_phases)]
     rews   = [episode['rewards'][i]        for i in range(num_phases)]
-    # if rews: rews[-1] /= 10.0
+    if rews: rews[-1] /= 10.0
 
     # Learning rate
     ax_lr = fig.add_subplot(gs_bot[0, 0])
@@ -338,9 +338,9 @@ def load_episodes(path='episodes.pkl'):
         return pickle.load(f)
     
 def main():
-    pt_file = "vec_evo_results_parallel/fixed_history.pt" # "seq_evo_results/history/history_gen52.pt" # 
+    pt_file = "vec_evo_results_parallel/fixed_history/history_gen33.pt" # "seq_evo_results/history/history_gen52.pt" # 
     # pkl_file = "vec_evo_results_parallel/episodes.pkl"
-    output_dir = "temp_fixed2"
+    output_dir = "vec_evo_results_parallel/fixed_history/history_gen33/"
     num_bins = 16
 
     os.makedirs(output_dir, exist_ok=True)
