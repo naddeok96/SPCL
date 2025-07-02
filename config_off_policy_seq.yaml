@@ -61,7 +61,7 @@ rl:
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
   bc_reward_threshold:       0.5
-  bc_percentile:             80
+  bc_percentile:             10
   use_triplet_loss:          true
   triplet_margin:            0.2
   pretrain_critic_offpolicy: true
@@ -75,7 +75,7 @@ observation:
 paths:
   save_path:                  "results/curriculum_rl"
   data_path:                  "./data"
-  pretrain_path:              "results/curriculum_rl/evolutionary_dataset.pt"
+  pretrain_path:              "/data/naddeok/spcl/merged_history.pt"
   off_policy_actor_model:     "results/off_policy/off_policy_actor_model_final.pth"
   off_policy_critic1_model:   "results/off_policy/off_policy_critic1_model_final.pth"
   off_policy_critic2_model:   "results/off_policy/off_policy_critic2_model_final.pth"
