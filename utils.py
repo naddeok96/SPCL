@@ -249,6 +249,9 @@ def tune_value_function(policy, value_net, data_loader, config):
         rewards = rewards.to(device).unsqueeze(1)
         next_states = next_states.to(device)
         dones = dones.to(device).unsqueeze(1)
+        # Cast bool tensors to float for arithmetic operations
+        if dones.dtype == torch.bool:
+            dones = dones.float()
 
         with torch.no_grad():
             next_a = policy(next_states)
