@@ -18,8 +18,8 @@ def main():
     output = args.output
     history_dir= args.history_dir
 
-    # output = "/data/naddeok/spcl/seq_history.pt"
-    # history_dir = "seq_evo_results/history/"
+    # output = "seq_evo_results/seq_history.pt"
+    # history_dir = "seq_evo_results/eval_parts/"
 
     basename = os.path.basename(output)
     m = re.match(r".*gen(\d+)\.pt$", basename)
@@ -33,7 +33,8 @@ def main():
     if not files:
         print(f"Error: no files matching '{pattern}' in '{history_dir}'", file=sys.stderr)
         sys.exit(1)
-
+    else:
+        print(f"{len(files)} we found to merge together.")
     all_s, all_a, all_r, all_ns, all_d = [], [], [], [], []
 
     for fn in files:

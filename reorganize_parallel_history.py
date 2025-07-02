@@ -18,13 +18,14 @@ and constants are defined below; no command-line arguments are required.
 import glob
 import os
 import torch
+from tqdm import tqdm
 
 # Directory containing ``history_gen*.pt`` files produced during parallel
 # evolution.
 HISTORY_DIR = "vec_evo_results_parallel/history"
 
 # Output file that will contain the reorganized dataset.
-OUTPUT_FILE = "vec_evo_results_parallel/fixed_history.pt"
+OUTPUT_FILE = "vec_evo_results_parallel/fixed_history/history_gen33.pt"
 
 # Number of models evaluated in parallel.  This must match the ``NUM_MODELS``
 # parameter used in ``run_evolution_parallel.sh`` / ``config_parallel.yaml``.
@@ -36,7 +37,7 @@ def load_history_files(history_dir: str):
     if not files:
         raise FileNotFoundError(f"No history_gen*.pt files found in {history_dir}")
     all_s, all_a, all_r, all_ns, all_d = [], [], [], [], []
-    for fn in files:
+    for fn in tqdm(files, desc="Loading history_gen*.pt"):
         d = torch.load(fn, map_location="cpu")
         all_s.append(d["states"])
         all_a.append(d["actions"])
@@ -76,6 +77,10 @@ def reorganize_parallel_history(data: dict, num_models: int) -> dict:
         return data
 
     new_s, new_a, new_r, new_ns, new_d = [], [], [], [], []
+    
+    total_eps = (n // num_models) + 1
+    pbar = tqdm(total=total_eps, desc="Reordering episodes")
+    
     start = 0
     while start < n:
         if bool(D[start]) and A[start,4]!=1.0:
@@ -121,7 +126,10 @@ def reorganize_parallel_history(data: dict, num_models: int) -> dict:
                 new_ns.append(NS[idx])
                 new_d.append(p == steps - 1)
 
+        pbar.update(1)
         start = end_idx
+    
+    pbar.close()
 
     return {
         "states": torch.stack(new_s),
