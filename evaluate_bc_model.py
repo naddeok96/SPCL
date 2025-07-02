@@ -3,6 +3,7 @@ import argparse
 import yaml
 import numpy as np
 import torch
+from tqdm import trange
 
 from curriculum_env import CurriculumEnv
 from rl_agent import DDPGAgent
@@ -41,7 +42,7 @@ def rollout_episode(agent, env, gamma):
 def evaluate_agent(agent, env, episodes=100, gamma=0.99):
     rewards = []
     preds, targets = [], []
-    for _ in range(episodes):
+    for _ in trange(episodes, desc="Eval episodes", leave=False):
         r, pairs = rollout_episode(agent, env, gamma)
         rewards.append(r)
         for q, ret in pairs:
@@ -61,7 +62,9 @@ def main():
     args = p.parse_args()
 
     cfg = load_config(args.config)
+    print(f"Loaded config from {args.config}")
     env = CurriculumEnv(cfg)
+    print("Environment created")
     obs_dim = len(env.reset())
     action_dim = 5
 
@@ -72,11 +75,14 @@ def main():
     critic_pth = os.path.join(bc_dir, "critic1.pth")
     if os.path.exists(actor_pth):
         agent.actor.load_state_dict(torch.load(actor_pth, map_location=agent.device))
+        print(f"Loaded actor checkpoint from {actor_pth}")
     if os.path.exists(critic_pth):
         agent.critic1.load_state_dict(torch.load(critic_pth, map_location=agent.device))
+        print(f"Loaded critic checkpoint from {critic_pth}")
     agent.actor.eval()
     agent.critic1.eval()
 
+    print(f"Evaluating behavior cloned model for {args.episodes} episodes...")
     avg_r, mse = evaluate_agent(
         agent, env, episodes=args.episodes, gamma=cfg["rl"].get("gamma", 0.99)
     )
@@ -86,6 +92,7 @@ def main():
     base_agent = DDPGAgent(obs_dim, action_dim, cfg)
     base_agent.actor.eval()
     base_agent.critic1.eval()
+    print(f"Evaluating random baseline for {args.episodes} episodes...")
     avg_r_base, mse_base = evaluate_agent(
         base_agent, env, episodes=args.episodes, gamma=cfg["rl"].get("gamma", 0.99)
     )
