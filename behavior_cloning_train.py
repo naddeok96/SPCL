@@ -14,6 +14,7 @@ import argparse
 import itertools
 import torch
 import matplotlib.pyplot as plt
+from tqdm import trange
 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -53,7 +54,8 @@ def behavior_clone_logged(policy, expert_data, iters=1000, batch_size=64, weight
     loss_fn = nn.MSELoss()
 
     losses = []
-    for _ in range(iters):
+    pbar = trange(iters, desc="Behavior Cloning")
+    for _ in pbar:
         s, a = next(data_iter)
         pred = policy(s)
         loss = loss_fn(pred, a)
@@ -62,6 +64,7 @@ def behavior_clone_logged(policy, expert_data, iters=1000, batch_size=64, weight
         nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
         opt.step()
         losses.append(loss.item())
+        pbar.set_postfix(loss=loss.item())
     return losses
 
 
@@ -82,7 +85,8 @@ def tune_value_function_logged(policy, value_net, data_loader, config, iters=100
 
     data_iter = itertools.cycle(data_loader)
     losses = []
-    for _ in range(iters):
+    pbar = trange(iters, desc="Critic Tuning")
+    for _ in pbar:
         states, actions, rewards, next_states, dones = next(data_iter)
         states = states.to(device)
         actions = actions.to(device)
@@ -112,6 +116,7 @@ def tune_value_function_logged(policy, value_net, data_loader, config, iters=100
         optimiser.step()
 
         losses.append(loss.item())
+        pbar.set_postfix(loss=loss.item())
     return losses
 
 
@@ -147,18 +152,38 @@ def main():
     elite_data = select_top_percent(dataset, top_percent)
 
     bc_iters = config["rl"].get("pretrain_bc_iters", 1000)
-    bc_losses = behavior_clone_logged(agent.actor, elite_data, iters=bc_iters, batch_size=config["rl"]["batch_size"])
+    print(f"Starting behavior cloning for {bc_iters} updates...")
+    bc_losses = behavior_clone_logged(
+        agent.actor,
+        elite_data,
+        iters=bc_iters,
+        batch_size=config["rl"]["batch_size"],
+    )
+    print(f"Behavior cloning done. Final loss: {bc_losses[-1]:.4f}")
 
     ds = TensorDataset(dataset["states"], dataset["actions"], dataset["rewards"], dataset["next_states"], dataset["dones"])
     loader = DataLoader(ds, batch_size=config["rl"]["batch_size"], shuffle=True)
 
     critic_iters = config["rl"].get("pretrain_critic_iters", 1000)
-    c1_losses = tune_value_function_logged(agent.actor, agent.critic1, loader, config["rl"], iters=critic_iters)
-    c2_losses = tune_value_function_logged(agent.actor, agent.critic2, loader, config["rl"], iters=critic_iters)
+    print(f"Tuning critics for {critic_iters} updates...")
+    c1_losses = tune_value_function_logged(
+        agent.actor, agent.critic1, loader, config["rl"], iters=critic_iters
+    )
+    c2_losses = tune_value_function_logged(
+        agent.actor, agent.critic2, loader, config["rl"], iters=critic_iters
+    )
+    print(
+        f"Critic tuning done. Final losses: C1={c1_losses[-1]:.4f}, C2={c2_losses[-1]:.4f}"
+    )
 
     torch.save(agent.actor.state_dict(), os.path.join(results_dir, "actor.pth"))
-    torch.save(agent.critic1.state_dict(), os.path.join(results_dir, "critic1.pth"))
-    torch.save(agent.critic2.state_dict(), os.path.join(results_dir, "critic2.pth"))
+    torch.save(
+        agent.critic1.state_dict(), os.path.join(results_dir, "critic1.pth")
+    )
+    torch.save(
+        agent.critic2.state_dict(), os.path.join(results_dir, "critic2.pth")
+    )
+    print(f"Models saved to {results_dir}")
 
     plt.figure()
     plt.plot(bc_losses)
