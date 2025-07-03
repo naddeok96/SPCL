@@ -31,7 +31,7 @@ def rollout_episode(agent, env, gamma):
     for r in reversed(rewards):
         R = r + gamma * R
         returns.insert(0, R)
-    s_t = torch.tensor(states, dtype=torch.float32, device=agent.device)
+    s_t = torch.stack([s.to(agent.device) if torch.is_tensor(s) else torch.tensor(s, dtype=torch.float32, device=agent.device) for s in states])
     a_t = torch.stack(actions).to(agent.device)
     with torch.no_grad():
         q_pred = agent.critic1(s_t, a_t).squeeze(1).cpu().numpy()
