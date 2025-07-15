@@ -6,6 +6,8 @@ import torch
 from tqdm import trange
 
 from curriculum_env import CurriculumEnv
+from curriculum_env import build_cnn_model, build_mlp_model
+from curriculum import evaluate_accuracy
 from rl_agent import DDPGAgent
 
 
@@ -53,6 +55,62 @@ def evaluate_agent(agent, env, episodes=100, gamma=0.99):
     return avg_reward, mse
 
 
+def train_standard_model(env, total_samples, lr):
+    """Train a model on MNIST without curriculum for a fixed number of samples."""
+    from torch.utils.data import ConcatDataset, WeightedRandomSampler, DataLoader
+    import torch.nn as nn
+
+    device = env.device
+    model_cfg = env.model_config
+    model_type = env.config.get("model_type", "cnn")
+    if model_type == "mlp":
+        model = build_mlp_model(model_cfg["hidden_layers"], model_cfg["activation"]).to(device)
+    else:
+        model = build_cnn_model(
+            model_cfg["n_convs"],
+            model_cfg["conv_ch"],
+            model_cfg["n_fcs"],
+            model_cfg["fc_units"],
+            model_cfg["activation"],
+            model_cfg["dropout"],
+        ).to(device)
+
+    dataset = ConcatDataset([
+        env.full_easy_ds,
+        env.full_medium_ds,
+        env.full_hard_ds,
+    ])
+    weights = [1 / 3] * len(env.full_easy_ds) + [1 / 3] * len(env.full_medium_ds) + [1 / 3] * len(env.full_hard_ds)
+    sampler = WeightedRandomSampler(weights, num_samples=total_samples, replacement=True)
+    loader = DataLoader(
+        dataset,
+        batch_size=env.batch_size,
+        sampler=sampler,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+
+    criterion = nn.CrossEntropyLoss()
+    optimiser = torch.optim.Adam(model.parameters(), lr=lr)
+    model.train()
+    samples = 0
+    for imgs, labels in loader:
+        imgs, labels = imgs.to(device), labels.to(device)
+        optimiser.zero_grad()
+        loss = criterion(model(imgs), labels)
+        loss.backward()
+        optimiser.step()
+        samples += imgs.size(0)
+        if samples >= total_samples:
+            break
+
+    easy = evaluate_accuracy(model, env.easy_loader, device)
+    med = evaluate_accuracy(model, env.medium_loader, device)
+    hard = evaluate_accuracy(model, env.hard_loader, device)
+    return (easy + med + hard) / 3.0
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--config", "-c", default="config.yaml", help="Path to config.yaml")
@@ -97,6 +155,16 @@ def main():
         base_agent, env, episodes=args.episodes, gamma=cfg["rl"].get("gamma", 0.99)
     )
     print(f"Random Baseline - Avg Reward: {avg_r_base:.3f}, Critic MSE: {mse_base:.3f}")
+
+    # Standard training comparison
+    print("Training standard model with fixed batching...")
+    env_std = CurriculumEnv(cfg)
+    env_std.reset()
+    lr_default = sum(cfg["curriculum"]["learning_rate_range"]) / 2
+    macro_acc = train_standard_model(
+        env_std, cfg["curriculum"]["train_samples_max"], lr_default
+    )
+    print(f"Standard Training Macro Accuracy: {macro_acc:.2f}%")
 
 
 if __name__ == "__main__":
