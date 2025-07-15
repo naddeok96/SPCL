@@ -165,19 +165,19 @@ def main():
         easy, med = proto_env.easy_frac, proto_env.medium_frac
 
         env_bc = CurriculumEnv(cfg)
-        env_bc.reset_with_fractions(easy, med)
+        env_bc.reset(easy, med)
         r_bc, mse_bc = evaluate_single_episode(agent, env_bc, gamma)
         bc_rewards.append(r_bc)
         bc_mses.append(mse_bc)
 
         env_base = CurriculumEnv(cfg)
-        env_base.reset_with_fractions(easy, med)
+        env_base.reset(easy, med)
         r_base, mse_base = evaluate_single_episode(base_agent, env_base, gamma)
         base_rewards.append(r_base)
         base_mses.append(mse_base)
 
         env_std = CurriculumEnv(cfg)
-        env_std.reset_with_fractions(easy, med)
+        env_std.reset(easy, med)
         acc = train_standard_model(env_std, cfg["curriculum"]["train_samples_max"], lr_default)
         std_accs.append(acc)
 

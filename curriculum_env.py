@@ -149,13 +149,19 @@ class CurriculumEnv:
         avail = torch.tensor(self.remaining_samples/self.train_samples_max, device=self.device).unsqueeze(0)
         return torch.cat([obs, phase, avail], dim=0)
 
-    def reset(self):
-        # Sample fractions
-        easy = random.uniform(self.easy_lower, self.easy_upper)
-        max_med = min(easy, 1.0-easy-self.hard_min)
-        min_med = max(self.medium_lower, (1.0-easy)/2)
-        self.easy_frac = easy
-        self.medium_frac = (min_med+max_med)/2 if max_med<=min_med else random.uniform(min_med, max_med)
+    def reset(self, easy_frac: float | None = None, medium_frac: float | None = None):
+        """Reset the environment. Optionally specify dataset fractions."""
+        if easy_frac is None or medium_frac is None:
+            easy = random.uniform(self.easy_lower, self.easy_upper)
+            max_med = min(easy, 1.0 - easy - self.hard_min)
+            min_med = max(self.medium_lower, (1.0 - easy) / 2)
+            self.easy_frac = easy
+            self.medium_frac = (
+                (min_med + max_med) / 2 if max_med <= min_med else random.uniform(min_med, max_med)
+            )
+        else:
+            self.easy_frac = easy_frac
+            self.medium_frac = medium_frac
 
         # Update subset indices
         e_idx, m_idx, h_idx = self._generate_splits()
@@ -205,51 +211,6 @@ class CurriculumEnv:
 
         return self.get_observation()
 
-    def reset_with_fractions(self, easy_frac: float, medium_frac: float):
-        """Reset the environment using the provided easy/medium fractions."""
-        self.easy_frac = easy_frac
-        self.medium_frac = medium_frac
-
-        # Update subset indices based on preset fractions
-        e_idx, m_idx, h_idx = self._generate_splits()
-        self.easy_subset.indices = e_idx
-        self.medium_subset.indices = m_idx
-        self.hard_subset.indices = h_idx
-
-        dl_args = dict(
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=4,
-            pin_memory=True,
-            persistent_workers=True,
-        )
-        self.easy_loader = DataLoader(self.easy_subset, **dl_args)
-        self.medium_loader = DataLoader(self.medium_subset, **dl_args)
-        self.hard_loader = DataLoader(self.hard_subset, **dl_args)
-        self.warmup_loader = DataLoader(
-            ConcatDataset([self.easy_subset, self.medium_subset, self.hard_subset]),
-            **dl_args,
-        )
-
-        self._init_model()
-        self.current_phase = 0
-        self.remaining_samples = self.train_samples_max
-
-        # Warm-up the new model on the fixed split
-        self.model.train()
-        opt = torch.optim.Adam(self.model.parameters(), lr=sum(self.lr_range) / 2)
-        criterion = nn.CrossEntropyLoss()
-        max_batches = max(1, int(0.25 * len(self.warmup_loader)))
-        for i, (x, y) in enumerate(self.warmup_loader):
-            if i >= max_batches:
-                break
-            x, y = x.to(self.device), y.to(self.device)
-            opt.zero_grad()
-            loss = criterion(self.model(x), y)
-            loss.backward()
-            opt.step()
-
-        return self.get_observation()
 
     def step(self, action):
         a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32)
