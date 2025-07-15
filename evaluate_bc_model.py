@@ -24,7 +24,9 @@ def rollout_episode(agent, env, gamma):
         states.append(state)
         actions.append(action)
         state, reward, done = env.step(action)
-        rewards.append(reward)
+        if done:
+            # print("Just looking at final reward")
+            rewards.append(reward/10)
     total_reward = sum(rewards)
     returns = []
     R = 0.0
