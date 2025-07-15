@@ -16,9 +16,9 @@ def load_config(path):
         return yaml.safe_load(f)
 
 
-def rollout_episode(agent, env, gamma):
+def rollout_episode(agent, env, gamma, reset_env=True):
     """Run one episode and return total reward and (Q, return) pairs."""
-    state = env.reset()
+    state = env.reset() if reset_env else env.get_observation()
     done = False
     states, actions, rewards = [], [], []
     while not done:
@@ -53,6 +53,13 @@ def evaluate_agent(agent, env, episodes=100, gamma=0.99):
     avg_reward = float(np.mean(rewards)) if rewards else 0.0
     mse = float(np.mean((np.array(preds) - np.array(targets)) ** 2)) if preds else 0.0
     return avg_reward, mse
+
+
+def evaluate_single_episode(agent, env, gamma=0.99):
+    r, pairs = rollout_episode(agent, env, gamma, reset_env=False)
+    preds, targets = zip(*pairs) if pairs else ([], [])
+    mse = float(np.mean((np.array(preds) - np.array(targets)) ** 2)) if preds else 0.0
+    return r, mse
 
 
 def train_standard_model(env, total_samples, lr):
@@ -121,12 +128,13 @@ def main():
 
     cfg = load_config(args.config)
     print(f"Loaded config from {args.config}")
-    env = CurriculumEnv(cfg)
-    print("Environment created")
-    obs_dim = len(env.reset())
+
+    # Temporary env to determine observation dimension
+    tmp_env = CurriculumEnv(cfg)
+    obs_dim = len(tmp_env.reset())
     action_dim = 5
 
-    # Evaluate behavior cloned model
+    # Initialize agents
     agent = DDPGAgent(obs_dim, action_dim, cfg)
     bc_dir = os.path.join("results", "behavior_cloning")
     actor_pth = os.path.join(bc_dir, "actor.pth")
@@ -140,31 +148,46 @@ def main():
     agent.actor.eval()
     agent.critic1.eval()
 
-    print(f"Evaluating behavior cloned model for {args.episodes} episodes...")
-    avg_r, mse = evaluate_agent(
-        agent, env, episodes=args.episodes, gamma=cfg["rl"].get("gamma", 0.99)
-    )
-    print(f"Behavior Cloned Model - Avg Reward: {avg_r:.3f}, Critic MSE: {mse:.3f}")
-
-    # Baseline random agent
     base_agent = DDPGAgent(obs_dim, action_dim, cfg)
     base_agent.actor.eval()
     base_agent.critic1.eval()
-    print(f"Evaluating random baseline for {args.episodes} episodes...")
-    avg_r_base, mse_base = evaluate_agent(
-        base_agent, env, episodes=args.episodes, gamma=cfg["rl"].get("gamma", 0.99)
-    )
-    print(f"Random Baseline - Avg Reward: {avg_r_base:.3f}, Critic MSE: {mse_base:.3f}")
 
-    # Standard training comparison
-    print("Training standard model with fixed batching...")
-    env_std = CurriculumEnv(cfg)
-    env_std.reset()
+    gamma = cfg["rl"].get("gamma", 0.99)
     lr_default = sum(cfg["curriculum"]["learning_rate_range"]) / 2
-    macro_acc = train_standard_model(
-        env_std, cfg["curriculum"]["train_samples_max"], lr_default
+
+    bc_rewards, bc_mses = [], []
+    base_rewards, base_mses = [], []
+    std_accs = []
+
+    for _ in trange(args.episodes, desc="Evaluation Episodes", leave=False):
+        proto_env = CurriculumEnv(cfg)
+        proto_env.reset()
+        easy, med = proto_env.easy_frac, proto_env.medium_frac
+
+        env_bc = CurriculumEnv(cfg)
+        env_bc.reset_with_fractions(easy, med)
+        r_bc, mse_bc = evaluate_single_episode(agent, env_bc, gamma)
+        bc_rewards.append(r_bc)
+        bc_mses.append(mse_bc)
+
+        env_base = CurriculumEnv(cfg)
+        env_base.reset_with_fractions(easy, med)
+        r_base, mse_base = evaluate_single_episode(base_agent, env_base, gamma)
+        base_rewards.append(r_base)
+        base_mses.append(mse_base)
+
+        env_std = CurriculumEnv(cfg)
+        env_std.reset_with_fractions(easy, med)
+        acc = train_standard_model(env_std, cfg["curriculum"]["train_samples_max"], lr_default)
+        std_accs.append(acc)
+
+    print(
+        f"Behavior Cloned Model - Avg Reward: {np.mean(bc_rewards):.3f}, Critic MSE: {np.mean(bc_mses):.3f}"
     )
-    print(f"Standard Training Macro Accuracy: {macro_acc:.2f}%")
+    print(
+        f"Random Baseline - Avg Reward: {np.mean(base_rewards):.3f}, Critic MSE: {np.mean(base_mses):.3f}"
+    )
+    print(f"Standard Training Macro Accuracy: {np.mean(std_accs):.2f}%")
 
 
 if __name__ == "__main__":
