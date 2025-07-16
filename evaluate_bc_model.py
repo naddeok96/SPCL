@@ -3,11 +3,14 @@ import argparse
 import yaml
 import numpy as np
 import torch
+import random
 from tqdm import trange
+
+from torch.utils.data import DataLoader, Subset, ConcatDataset, WeightedRandomSampler
 
 from curriculum_env import CurriculumEnv
 from curriculum_env import build_cnn_model, build_mlp_model
-from curriculum import evaluate_accuracy
+from curriculum import evaluate_accuracy, run_phase_training
 from rl_agent import DDPGAgent
 
 
@@ -120,76 +123,231 @@ def train_standard_model(env, total_samples, lr):
     return (easy + med + hard) / 3.0
 
 
+def prepare_dataset(cfg, easy_frac=0.9, med_frac=0.075, seed=0):
+    """Create a fixed dataset split for all experiments."""
+    random.seed(seed)
+    torch.manual_seed(seed)
+    env = CurriculumEnv(cfg)
+    env.reset(easy_frac, med_frac)
+
+    dl_args = dict(
+        batch_size=env.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+
+    easy_ds = Subset(env.full_easy_ds, list(env.easy_subset.indices))
+    med_ds = Subset(env.full_medium_ds, list(env.medium_subset.indices))
+    hard_ds = Subset(env.full_hard_ds, list(env.hard_subset.indices))
+
+    easy_loader = DataLoader(easy_ds, **dl_args)
+    med_loader = DataLoader(med_ds, **dl_args)
+    hard_loader = DataLoader(hard_ds, **dl_args)
+
+    return {
+        "device": env.device,
+        "batch_size": env.batch_size,
+        "model_cfg": env.model_config,
+        "easy_loader": easy_loader,
+        "med_loader": med_loader,
+        "hard_loader": hard_loader,
+        "easy_ds": easy_ds,
+        "med_ds": med_ds,
+        "hard_ds": hard_ds,
+    }
+
+
+def build_model(cfg, model_cfg, device, seed=0):
+    """Construct a fresh model with controlled initialization."""
+    torch.manual_seed(seed)
+    model_type = cfg.get("model_type", "cnn")
+    if model_type == "mlp":
+        return build_mlp_model(model_cfg["hidden_layers"], model_cfg["activation"]).to(device)
+    return build_cnn_model(
+        model_cfg["n_convs"],
+        model_cfg["conv_ch"],
+        model_cfg["n_fcs"],
+        model_cfg["fc_units"],
+        model_cfg["activation"],
+        model_cfg["dropout"],
+    ).to(device)
+
+
+def run_curriculum(model, loaders, lr, mixtures, samples_per_phase, device):
+    for mix in mixtures:
+        hp = {
+            "training_samples": samples_per_phase,
+            "learning_rate": lr,
+            "mixture_ratio": mix,
+            "phase_batch_size": loaders["easy_loader"].batch_size,
+        }
+        run_phase_training(
+            model,
+            loaders["easy_loader"],
+            loaders["med_loader"],
+            loaders["hard_loader"],
+            hp,
+            device,
+        )
+    ea = evaluate_accuracy(model, loaders["easy_loader"], device)
+    ma = evaluate_accuracy(model, loaders["med_loader"], device)
+    ha = evaluate_accuracy(model, loaders["hard_loader"], device)
+    return (ea + ma + ha) / 3.0
+
+
+def train_uniform(model, loaders, lr, total_samples, device):
+    dataset = ConcatDataset([
+        loaders["easy_ds"],
+        loaders["med_ds"],
+        loaders["hard_ds"],
+    ])
+    # Use uniform weights so sampling follows the dataset's natural
+    # composition (e.g. ~90% easy, 7.5% medium, 2.5% hard).
+    weights = [1.0] * len(dataset)
+    sampler = WeightedRandomSampler(
+        weights,
+        num_samples=total_samples,
+        replacement=True,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=loaders["easy_loader"].batch_size,
+        sampler=sampler,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+    import torch.nn as nn
+    criterion = nn.CrossEntropyLoss()
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    model.train()
+    seen = 0
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+        opt.zero_grad()
+        loss = criterion(model(x), y)
+        loss.backward()
+        opt.step()
+        seen += x.size(0)
+        if seen >= total_samples:
+            break
+    ea = evaluate_accuracy(model, loaders["easy_loader"], device)
+    ma = evaluate_accuracy(model, loaders["med_loader"], device)
+    ha = evaluate_accuracy(model, loaders["hard_loader"], device)
+    return (ea + ma + ha) / 3.0
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--config", "-c", default="config.yaml", help="Path to config.yaml")
-    p.add_argument(
-        "--episodes", "-n", type=int, default=100, help="Number of evaluation episodes"
-    )
     args = p.parse_args()
 
     cfg = load_config(args.config)
     print(f"Loaded config from {args.config}")
 
-    # Temporary env to determine observation dimension
+    data = prepare_dataset(cfg, easy_frac=0.9, med_frac=0.075, seed=0)
+    device = data["device"]
+    lr = sum(cfg["curriculum"]["learning_rate_range"]) / 2
+    total = cfg["curriculum"]["train_samples_max"]
+
+    # Determine observation dimension for agents
     tmp_env = CurriculumEnv(cfg)
     obs_dim = len(tmp_env.reset())
     action_dim = 5
 
-    # Initialize agents
     agent = DDPGAgent(obs_dim, action_dim, cfg)
-    bc_dir = os.path.join("results", "behavior_cloning")
-    actor_pth = os.path.join(bc_dir, "actor.pth")
-    critic_pth = os.path.join(bc_dir, "critic1.pth")
+    actor_pth = os.path.join("results", "behavior_cloning", "actor.pth")
     if os.path.exists(actor_pth):
         agent.actor.load_state_dict(torch.load(actor_pth, map_location=agent.device))
         print(f"Loaded actor checkpoint from {actor_pth}")
-    if os.path.exists(critic_pth):
-        agent.critic1.load_state_dict(torch.load(critic_pth, map_location=agent.device))
-        print(f"Loaded critic checkpoint from {critic_pth}")
     agent.actor.eval()
-    agent.critic1.eval()
 
-    base_agent = DDPGAgent(obs_dim, action_dim, cfg)
-    base_agent.actor.eval()
-    base_agent.critic1.eval()
+    rand_agent = DDPGAgent(obs_dim, action_dim, cfg)
+    rand_agent.actor.eval()
 
-    gamma = cfg["rl"].get("gamma", 0.99)
-    lr_default = sum(cfg["curriculum"]["learning_rate_range"]) / 2
+    results = {}
 
-    bc_rewards, bc_mses = [], []
-    base_rewards, base_mses = [], []
-    std_accs = []
+    # 1) Easy -> Medium -> Hard
+    m1 = build_model(cfg, data["model_cfg"], device, seed=0)
+    mixtures = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    acc = run_curriculum(m1, data, lr, mixtures, total // 3, device)
+    results["easy_med_hard"] = acc
 
-    for _ in trange(args.episodes, desc="Evaluation Episodes", leave=False):
-        proto_env = CurriculumEnv(cfg)
-        proto_env.reset()
-        easy, med = proto_env.easy_frac, proto_env.medium_frac
+    # 2) 80E10M10H -> 10E80M10H -> 10E10M80H
+    m2 = build_model(cfg, data["model_cfg"], device, seed=0)
+    mixtures = [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]]
+    acc = run_curriculum(m2, data, lr, mixtures, total // 3, device)
+    results["progressive"] = acc
 
-        env_bc = CurriculumEnv(cfg)
-        env_bc.reset(easy, med)
-        r_bc, mse_bc = evaluate_single_episode(agent, env_bc, gamma)
-        bc_rewards.append(r_bc)
-        bc_mses.append(mse_bc)
+    # 3) Curriculum from pretrained agent
+    m3 = build_model(cfg, data["model_cfg"], device, seed=0)
+    env_a = CurriculumEnv(cfg)
+    env_a.reset(0.9, 0.075)
+    env_a.easy_subset.indices = list(data["easy_ds"].indices)
+    env_a.medium_subset.indices = list(data["med_ds"].indices)
+    env_a.hard_subset.indices = list(data["hard_ds"].indices)
+    state = env_a.get_observation()
+    remaining = total
+    for _ in range(env_a.max_phases):
+        act = agent.select_action(state, noise_enable=False)
+        lr_a = float(act[0])
+        mix = act[1:4].cpu().numpy()
+        mix = np.clip(mix, 0.0, None)
+        mix = mix / mix.sum() if mix.sum() > 0 else np.array([1/3,1/3,1/3])
+        frac = float(act[4])
+        num = int(frac * remaining)
+        if num <= 0:
+            num = remaining
+        run_phase_training(m3, data["easy_loader"], data["med_loader"], data["hard_loader"],
+                           {"training_samples": num, "learning_rate": lr_a, "mixture_ratio": mix.tolist(), "phase_batch_size": data["batch_size"]}, device)
+        remaining -= num
+        state, _, done = env_a.step(act)
+        if done or remaining <= 0:
+            break
+    ea = evaluate_accuracy(m3, data["easy_loader"], device)
+    ma = evaluate_accuracy(m3, data["med_loader"], device)
+    ha = evaluate_accuracy(m3, data["hard_loader"], device)
+    results["pretrained_agent"] = (ea + ma + ha) / 3.0
 
-        env_base = CurriculumEnv(cfg)
-        env_base.reset(easy, med)
-        r_base, mse_base = evaluate_single_episode(base_agent, env_base, gamma)
-        base_rewards.append(r_base)
-        base_mses.append(mse_base)
+    # 4) Curriculum from random agent
+    m4 = build_model(cfg, data["model_cfg"], device, seed=0)
+    env_b = CurriculumEnv(cfg)
+    env_b.reset(0.9, 0.075)
+    env_b.easy_subset.indices = list(data["easy_ds"].indices)
+    env_b.medium_subset.indices = list(data["med_ds"].indices)
+    env_b.hard_subset.indices = list(data["hard_ds"].indices)
+    state = env_b.get_observation()
+    remaining = total
+    for _ in range(env_b.max_phases):
+        act = rand_agent.select_action(state, noise_enable=False)
+        lr_a = float(act[0])
+        mix = act[1:4].cpu().numpy()
+        mix = np.clip(mix, 0.0, None)
+        mix = mix / mix.sum() if mix.sum() > 0 else np.array([1/3,1/3,1/3])
+        frac = float(act[4])
+        num = int(frac * remaining)
+        if num <= 0:
+            num = remaining
+        run_phase_training(m4, data["easy_loader"], data["med_loader"], data["hard_loader"],
+                           {"training_samples": num, "learning_rate": lr_a, "mixture_ratio": mix.tolist(), "phase_batch_size": data["batch_size"]}, device)
+        remaining -= num
+        state, _, done = env_b.step(act)
+        if done or remaining <= 0:
+            break
+    ea = evaluate_accuracy(m4, data["easy_loader"], device)
+    ma = evaluate_accuracy(m4, data["med_loader"], device)
+    ha = evaluate_accuracy(m4, data["hard_loader"], device)
+    results["random_agent"] = (ea + ma + ha) / 3.0
 
-        env_std = CurriculumEnv(cfg)
-        env_std.reset(easy, med)
-        acc = train_standard_model(env_std, cfg["curriculum"]["train_samples_max"], lr_default)
-        std_accs.append(acc)
+    # 5) No curriculum
+    m5 = build_model(cfg, data["model_cfg"], device, seed=0)
+    acc = train_uniform(m5, data, lr, total, device)
+    results["no_curriculum"] = acc
 
-    print(
-        f"Behavior Cloned Model - Avg Reward: {np.mean(bc_rewards):.3f}, Critic MSE: {np.mean(bc_mses):.3f}"
-    )
-    print(
-        f"Random Baseline - Avg Reward: {np.mean(base_rewards):.3f}, Critic MSE: {np.mean(base_mses):.3f}"
-    )
-    print(f"Standard Training Macro Accuracy: {np.mean(std_accs):.2f}%")
+    for k, v in results.items():
+        print(f"{k}: {v:.2f}%")
 
 
 if __name__ == "__main__":
