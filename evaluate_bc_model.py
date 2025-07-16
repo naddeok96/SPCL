@@ -198,13 +198,19 @@ def run_curriculum(model, loaders, lr, mixtures, samples_per_phase, device):
 
 
 def train_uniform(model, loaders, lr, total_samples, device):
-    dataset = ConcatDataset([loaders["easy_ds"], loaders["med_ds"], loaders["hard_ds"]])
-    weights = (
-        [1 / 3] * len(loaders["easy_ds"]) +
-        [1 / 3] * len(loaders["med_ds"]) +
-        [1 / 3] * len(loaders["hard_ds"])
+    dataset = ConcatDataset([
+        loaders["easy_ds"],
+        loaders["med_ds"],
+        loaders["hard_ds"],
+    ])
+    # Use uniform weights so sampling follows the dataset's natural
+    # composition (e.g. ~90% easy, 7.5% medium, 2.5% hard).
+    weights = [1.0] * len(dataset)
+    sampler = WeightedRandomSampler(
+        weights,
+        num_samples=total_samples,
+        replacement=True,
     )
-    sampler = WeightedRandomSampler(weights, num_samples=total_samples, replacement=True)
     loader = DataLoader(
         dataset,
         batch_size=loaders["easy_loader"].batch_size,
