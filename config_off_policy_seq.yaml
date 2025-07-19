@@ -61,7 +61,7 @@ rl:
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
   bc_reward_threshold:       0.5
-  bc_percentile:             10
+  bc_percentile:             0.75
   use_triplet_loss:          true
   triplet_margin:            0.2
   pretrain_critic_offpolicy: true

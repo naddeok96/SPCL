@@ -25,7 +25,7 @@ from tqdm import tqdm
 HISTORY_DIR = "vec_evo_results_parallel/history"
 
 # Output file that will contain the reorganized dataset.
-OUTPUT_FILE = "vec_evo_results_parallel/fixed_history/history_gen33.pt"
+OUTPUT_FILE = "vec_evo_results_parallel/fixed_history/current.pt"
 
 # Number of models evaluated in parallel.  This must match the ``NUM_MODELS``
 # parameter used in ``run_evolution_parallel.sh`` / ``config_parallel.yaml``.

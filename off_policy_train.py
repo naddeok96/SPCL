@@ -259,16 +259,6 @@ def main():
     top_percent = config["rl"].get("bc_top_percent", 10)
     elite_data = select_top_percent(dataset, top_percent)
 
-    if config["rl"].get("use_behavioral_cloning", False):
-        behavior_clone(agent.actor, elite_data)
-
-    from torch.utils.data import DataLoader, TensorDataset
-    ds = TensorDataset(states, actions, rewards, next_states, dones)
-    loader = DataLoader(ds, batch_size=config["rl"]["batch_size"], shuffle=True)
-
-    tune_value_function(agent.actor, agent.critic1, loader, config["rl"])
-    tune_value_function(agent.actor, agent.critic2, loader, config["rl"])
-
     elite_fraction = top_percent / 100.0
     replay_buffer = build_augmented_replay_buffer(elite_data, dataset, config["rl"]["buffer_size"], elite_fraction, config["device"])
 
@@ -467,17 +457,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
 
 
 

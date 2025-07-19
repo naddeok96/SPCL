@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 OUTPUT_PATH = "/data/naddeok/spcl/merged_history.pt"  # where to save the merged dataset
 HISTOGRAM_PATH = "/data/naddeok/spcl/merged_reward_hist.png"  # reward distribution plot
 FINAL_REWARD_HIST_PATH = "/data/naddeok/spcl/final_reward_hist.png"  # final reward distribution plot
-THRESHOLD = 800  # reward threshold for additional statistics
+THRESHOLD = 920  # reward threshold for additional statistics
 THRESHOLD_HIST_PATH = "/data/naddeok/spcl/reward_hist_over_threshold.png"  # histogram for rewards >= threshold
-PERCENTILE = 90  # percentile for percentage-based thresholding (top 10%)
+PERCENTILE = 99.9  # percentile for percentage-based thresholding (top 10%)
 PERCENTILE_HIST_PATH = "/data/naddeok/spcl/reward_hist_top_percentile.png"  # histogram for top percentile rewards
 HISTORY_DIRS = [
     "seq_evo_results/history",
