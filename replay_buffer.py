@@ -174,7 +174,23 @@ def build_augmented_replay_buffer(elite_data, all_data, capacity, elite_fraction
         s, a, r, ns, d = t
         buffer._push_elite(s.to(device), a.to(device), torch.tensor([float(r)], device=device), ns.to(device), torch.tensor([float(d)], device=device))
 
-    others = [t for t in to_list(all_data) if t not in elite_trans]
+    def is_in(t, trans_list):
+        for u in trans_list:
+            match = True
+            for x, y in zip(t, u):
+                if torch.is_tensor(x) and torch.is_tensor(y):
+                    if not torch.equal(x, y):
+                        match = False
+                        break
+                else:
+                    if x != y:
+                        match = False
+                        break
+            if match:
+                return True
+        return False
+
+    others = [t for t in to_list(all_data) if not is_in(t, elite_trans)]
     random.shuffle(others)
     buffer.refresh_random(others)
 
