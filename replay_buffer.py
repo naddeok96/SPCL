@@ -70,9 +70,10 @@ class PERBuffer(ReplayBuffer):
     def __init__(self, capacity, device, alpha=0.6, beta=0.4, epsilon=1e-6, per_type="proportional"):
         super().__init__(capacity, device)
         self.priorities = torch.zeros(capacity, device=device)
-        self.alpha = alpha
-        self.beta = beta
-        self.epsilon = epsilon
+        # Cast hyperparameters to floats in case they are provided as strings
+        self.alpha = float(alpha)
+        self.beta = float(beta)
+        self.epsilon = float(epsilon)
         self.per_type = per_type
 
     def push(self, *args):
