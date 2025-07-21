@@ -250,6 +250,7 @@ def main():
         "next_states": next_states,
         "dones": dones,
     }
+    print(f"Loaded dataset from {dataset_path} with {len(states)} transitions")
 
     env = CurriculumEnv(config)
     obs_dim = len(env.reset())
@@ -260,7 +261,17 @@ def main():
     elite_data = select_top_percent(dataset, top_percent)
 
     elite_fraction = top_percent / 100.0
-    replay_buffer = build_augmented_replay_buffer(elite_data, dataset, config["rl"]["buffer_size"], elite_fraction, config["device"])
+    replay_buffer = build_augmented_replay_buffer(
+        elite_data,
+        dataset,
+        config["rl"]["buffer_size"],
+        elite_fraction,
+        config["device"],
+    )
+    print(
+        f"Replay buffer initialized with {len(replay_buffer)} transitions "
+        f"(capacity {config['rl']['buffer_size']})"
+    )
 
     probe_batch_size = 256
     perm = torch.randperm(len(states))
@@ -272,6 +283,7 @@ def main():
     checkpoint_interval = int(num_updates * 0.2)
     if checkpoint_interval == 0:
         checkpoint_interval = 1
+    print(f"Starting off-policy training for {num_updates} updates")
 
     # Lists for tracking metrics over training.
     actor_losses = []
@@ -305,12 +317,14 @@ def main():
             eval_rewards = []
             obs_eval = env.reset()
             done = False
-            while not done:
-                action_eval = agent.select_action(obs_eval, noise_enable=False)
-                eval_states.append(obs_eval)
-                eval_actions.append(action_eval)
-                obs_eval, reward, done = env.step(action_eval)
-                eval_rewards.append(reward)
+            with tqdm(total=env.max_phases, desc=f"Eval {update}", leave=False) as pbar:
+                while not done:
+                    action_eval = agent.select_action(obs_eval, noise_enable=False)
+                    eval_states.append(obs_eval)
+                    eval_actions.append(action_eval)
+                    obs_eval, reward, done = env.step(action_eval)
+                    eval_rewards.append(reward)
+                    pbar.update(1)
             total_reward = sum(eval_rewards)
             reward_progress.append(total_reward)
             eval_updates.append(update)
@@ -392,12 +406,14 @@ def main():
     eval_rewards = []
     obs_eval = env.reset()
     done = False
-    while not done:
-        action_eval = agent.select_action(obs_eval, noise_enable=False)
-        eval_states.append(obs_eval)
-        eval_actions.append(action_eval)
-        obs_eval, reward, done = env.step(action_eval)
-        eval_rewards.append(reward)
+    with tqdm(total=env.max_phases, desc="Final Eval", leave=False) as pbar:
+        while not done:
+            action_eval = agent.select_action(obs_eval, noise_enable=False)
+            eval_states.append(obs_eval)
+            eval_actions.append(action_eval)
+            obs_eval, reward, done = env.step(action_eval)
+            eval_rewards.append(reward)
+            pbar.update(1)
     total_reward = sum(eval_rewards)
     print(f"Final evaluation episode total reward: {total_reward}")
     
