@@ -174,23 +174,18 @@ def build_augmented_replay_buffer(elite_data, all_data, capacity, elite_fraction
         s, a, r, ns, d = t
         buffer._push_elite(s.to(device), a.to(device), torch.tensor([float(r)], device=device), ns.to(device), torch.tensor([float(d)], device=device))
 
-    def is_in(t, trans_list):
-        for u in trans_list:
-            match = True
-            for x, y in zip(t, u):
-                if torch.is_tensor(x) and torch.is_tensor(y):
-                    if not torch.equal(x, y):
-                        match = False
-                        break
-                else:
-                    if x != y:
-                        match = False
-                        break
-            if match:
-                return True
-        return False
+    def make_key(tr):
+        key = []
+        for item in tr:
+            if torch.is_tensor(item):
+                key.append(item.cpu().numpy().tobytes())
+            else:
+                key.append(item)
+        return tuple(key)
 
-    others = [t for t in to_list(all_data) if not is_in(t, elite_trans)]
+    elite_keys = {make_key(t) for t in elite_trans}
+
+    others = [t for t in to_list(all_data) if make_key(t) not in elite_keys]
     random.shuffle(others)
     buffer.refresh_random(others)
 
