@@ -176,17 +176,70 @@ class AugmentedReplayBuffer(ReplayBuffer):
         return len(self.elite) + len(self.random)
 
 
-def build_augmented_replay_buffer(elite_data, all_data, capacity, elite_fraction, device="cpu"):
-    """Create an :class:`AugmentedReplayBuffer` seeded with elite and random data."""
-    buffer = AugmentedReplayBuffer(capacity, device, elite_fraction)
+def build_augmented_replay_buffer(
+    elite_data,
+    all_data,
+    capacity,
+    elite_fraction,
+    device="cpu",
+    use_per=False,
+    per_alpha=0.6,
+    per_beta=0.4,
+    per_epsilon=1e-6,
+    per_type="proportional",
+):
+    """Create a replay buffer seeded with elite and random data.
+
+    If ``use_per`` is ``True`` a :class:`PERBuffer` is returned, otherwise an
+    :class:`AugmentedReplayBuffer` is used (maintaining a permanent elite subset).
+    """
+
+    if use_per:
+        buffer = PERBuffer(
+            capacity,
+            device,
+            alpha=per_alpha,
+            beta=per_beta,
+            epsilon=per_epsilon,
+            per_type=per_type,
+        )
+    else:
+        buffer = AugmentedReplayBuffer(capacity, device, elite_fraction)
 
     def to_list(data):
-        return list(zip(data["states"], data["actions"], data["rewards"], data["next_states"], data["dones"]))
+        return list(
+            zip(
+                data["states"],
+                data["actions"],
+                data["rewards"],
+                data["next_states"],
+                data["dones"],
+            )
+        )
 
     elite_trans = to_list(elite_data)
-    for t in elite_trans[:buffer.elite_capacity]:
-        s, a, r, ns, d = t
-        buffer._push_elite(s.to(device), a.to(device), torch.tensor([float(r)], device=device), ns.to(device), torch.tensor([float(d)], device=device))
+
+    if use_per:
+        elite_cap = int(capacity * elite_fraction)
+        for t in elite_trans[:elite_cap]:
+            s, a, r, ns, d = t
+            buffer.push(
+                s.to(device),
+                a.to(device),
+                float(r),
+                ns.to(device),
+                bool(d),
+            )
+    else:
+        for t in elite_trans[: buffer.elite_capacity]:
+            s, a, r, ns, d = t
+            buffer._push_elite(
+                s.to(device),
+                a.to(device),
+                torch.tensor([float(r)], device=device),
+                ns.to(device),
+                torch.tensor([float(d)], device=device),
+            )
 
     def make_key(tr):
         key = []
@@ -201,7 +254,20 @@ def build_augmented_replay_buffer(elite_data, all_data, capacity, elite_fraction
 
     others = [t for t in to_list(all_data) if make_key(t) not in elite_keys]
     random.shuffle(others)
-    buffer.refresh_random(others)
+
+    if use_per:
+        remaining = capacity - len(buffer)
+        for t in others[:remaining]:
+            s, a, r, ns, d = t
+            buffer.push(
+                s.to(device),
+                a.to(device),
+                float(r),
+                ns.to(device),
+                bool(d),
+            )
+    else:
+        buffer.refresh_random(others)
 
     return buffer
 
