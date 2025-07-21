@@ -267,6 +267,11 @@ def main():
         config["rl"]["buffer_size"],
         elite_fraction,
         config["device"],
+        use_per=config["rl"].get("per_enabled", False),
+        per_alpha=config["rl"].get("per_alpha", 0.6),
+        per_beta=config["rl"].get("per_beta", 0.4),
+        per_epsilon=config["rl"].get("per_epsilon", 1e-6),
+        per_type=config["rl"].get("per_type", "proportional"),
     )
     print(
         f"Replay buffer initialized with {len(replay_buffer)} transitions "
