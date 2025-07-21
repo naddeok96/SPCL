@@ -29,8 +29,13 @@ class ReplayBuffer:
             next_state (torch.Tensor): Next state.
             done (bool): Whether the episode ended.
         """
-        entry = (state, action, torch.tensor([reward], device=self.device),
-                 next_state, torch.tensor([done], device=self.device, dtype=torch.float32))
+        entry = (
+            state.to(self.device),
+            action.to(self.device),
+            torch.tensor([float(reward)], device=self.device),
+            next_state.to(self.device),
+            torch.tensor([float(done)], device=self.device, dtype=torch.float32),
+        )
         if len(self.buffer) < self.capacity:
             self.buffer.append(entry)
         else:
@@ -134,11 +139,20 @@ class AugmentedReplayBuffer(ReplayBuffer):
             self.random_pos = (self.random_pos + 1) % self.elite_capacity
 
     def push(self, *args):
+        state, action, reward, next_state, done = args
+        entry = (
+            state.to(self.device),
+            action.to(self.device),
+            torch.tensor([float(reward)], device=self.device),
+            next_state.to(self.device),
+            torch.tensor([float(done)], device=self.device, dtype=torch.float32),
+        )
+
         if len(self.random) < self.capacity - self.elite_capacity:
-            self.random.append(args)
+            self.random.append(entry)
         else:
             idx = self.position % (self.capacity - self.elite_capacity)
-            self.random[idx] = args
+            self.random[idx] = entry
         self.position = (self.position + 1) % (self.capacity - self.elite_capacity)
 
     def sample(self, batch_size):
