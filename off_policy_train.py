@@ -16,6 +16,7 @@ import random
 import argparse
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import numpy as np
 from tqdm import trange, tqdm
 
 
@@ -82,152 +83,140 @@ def breakdown_action(action):
     breakdown['sample_usage_fraction'] = action[4].tolist()
     return breakdown
 
+
 def plot_episode_figure(episode, group_name, num_bins, output_dir):
-    """
-    For a given episode, creates a detailed figure with:
-      - TOP BLOCK: For each phase (transition), a row of 4 subplots:
-            * Column 0: Combined "Easy" loss histogram (green for correct, red for incorrect).
-            * Column 1: Combined "Medium" loss histogram.
-            * Column 2: Combined "Hard" loss histogram.
-            * Column 3: State Info bar chart (relative sizes and extra features).
-         Each row is annotated with that phase’s reward.
-      - BOTTOM BLOCK: Aggregated evolution across phases with 4 subplots:
-            1. Learning Rate evolution.
-            2. Sample Usage evolution.
-            3. Mixing Ratios as a stacked bar plot (one bar per phase).
-            4. Reward evolution (with the last phase reward divided by 10).
-    The resulting figure is saved to the output directory.
-    """
-    states  = episode['states']
-    actions = episode['actions']
-    rewards = episode['rewards']
+    """Create a detailed episode figure matching analyze_history.py styling."""
+    # Bin edges taken from analyze_history.py
+    min_val, max_val, alpha = 0.0, 13.8, 2.0
+    rel = torch.linspace(0, 1, num_bins + 1)
+    edges = (min_val + (max_val - min_val) * (rel ** alpha)).tolist()
+    centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges)-1)]
+    widths = [edges[i+1] - edges[i] for i in range(len(edges)-1)]
+
+    states = episode["states"]
+    actions = episode["actions"]
+    rewards = episode["rewards"]
     num_phases = len(states)
-    
+
     fig = plt.figure(figsize=(20, num_phases * 3 + 3))
-    
-    # TOP BLOCK: grid for each phase.
-    gs_top = gridspec.GridSpec(nrows=num_phases, ncols=4, top=0.95, bottom=0.55, 
-                               wspace=0.4, hspace=0.6, height_ratios=[1] * num_phases)
-    # BOTTOM BLOCK: 1 row, 4 columns.
-    gs_bot = gridspec.GridSpec(nrows=1, ncols=4, top=0.5, bottom=0.05, wspace=0.5)
-    
-    # TOP BLOCK: For each phase, plot state breakdown.
+    fig.patch.set_facecolor("#fffaf0")
+    fig.suptitle("\U0001F389 Fun Episode Analysis \U0001F389", fontsize=18, fontweight="bold", y=0.995)
+
+    gs_top = gridspec.GridSpec(nrows=num_phases, ncols=4, top=0.90, bottom=0.55,
+                               wspace=0.4, hspace=0.6, height_ratios=[1]*num_phases)
+    gs_bot = gridspec.GridSpec(nrows=1, ncols=4, top=0.50, bottom=0.05, wspace=0.5)
+
     for i in range(num_phases):
         s = states[i]
         r = rewards[i]
         sb = breakdown_state(s, num_bins)
-        
-        x = list(range(num_bins))
-        w = 0.4
-        x_left  = [xi - w/2 for xi in x]
-        x_right = [xi + w/2 for xi in x]
-        
-        # Easy losses
-        ax0 = fig.add_subplot(gs_top[i,0])
-        ax0.bar(x_left,  sb['easy_correct_hist'],   w, label='Correct')
-        ax0.bar(x_right, sb['easy_incorrect_hist'], w, color='red', label='Incorrect')
+
+        ax0 = fig.add_subplot(gs_top[i, 0])
+        ax0.set_facecolor("#f5f5f5")
+        ax0.bar(centers, sb["easy_correct_hist"], widths, align="center", color="green", hatch="//", alpha=0.7, label="Correct")
+        ax0.bar(centers, sb["easy_incorrect_hist"], widths, align="center", color="red", hatch="xx", alpha=0.7, label="Incorrect")
         if i == 0:
-            ax0.set_title("Easy Loss Hist", fontsize=10)
+            ax0.set_title("Easy Loss Hist", fontsize=10, fontweight="bold")
             ax0.legend(fontsize=8)
         ax0.set_ylabel(f"P{i+1}\nR:{r:.2f}", fontsize=9)
-        ax0.tick_params(labelsize=8)
+        ax0.grid(True, linestyle="--", alpha=0.5)
+        ax0.tick_params(axis="both", labelsize=8, rotation=45)
+        ax0.set_xticks(edges)
 
-        # Medium losses
-        ax1 = fig.add_subplot(gs_top[i,1])
-        ax1.bar(x_left,  sb['medium_correct_hist'],   w)
-        ax1.bar(x_right, sb['medium_incorrect_hist'], w, color='red')
+        ax1 = fig.add_subplot(gs_top[i, 1])
+        ax1.set_facecolor("#f5f5f5")
+        ax1.bar(centers, sb["medium_correct_hist"], widths, color="green", hatch="//", alpha=0.7)
+        ax1.bar(centers, sb["medium_incorrect_hist"], widths, color="red", hatch="xx", alpha=0.7)
         if i == 0:
-            ax1.set_title("Medium Loss Hist", fontsize=10)
-        ax1.tick_params(labelsize=8)
+            ax1.set_title("Medium Loss Hist", fontsize=10, fontweight="bold")
+        ax1.grid(True, linestyle="--", alpha=0.5)
+        ax1.tick_params(axis="both", labelsize=8, rotation=45)
+        ax1.set_xticks(edges)
 
-        # Hard losses
-        ax2 = fig.add_subplot(gs_top[i,2])
-        ax2.bar(x_left,  sb['hard_correct_hist'],   w)
-        ax2.bar(x_right, sb['hard_incorrect_hist'], w, color='red')
+        ax2 = fig.add_subplot(gs_top[i, 2])
+        ax2.set_facecolor("#f5f5f5")
+        ax2.bar(centers, sb["hard_correct_hist"], widths, color="green", hatch="//", alpha=0.7)
+        ax2.bar(centers, sb["hard_incorrect_hist"], widths, color="red", hatch="xx", alpha=0.7)
         if i == 0:
-            ax2.set_title("Hard Loss Hist", fontsize=10)
-        ax2.tick_params(labelsize=8)
+            ax2.set_title("Hard Loss Hist", fontsize=10, fontweight="bold")
+        ax2.grid(True, linestyle="--", alpha=0.5)
+        ax2.tick_params(axis="both", labelsize=8, rotation=45)
+        ax2.set_xticks(edges)
 
-        # State info
-        ax3 = fig.add_subplot(gs_top[i,3])
-        info = sb['relative_sizes'] + sb['extra']
-        ax3.bar(list(range(5)), info,
-                color=['blue','orange','purple','cyan','magenta'])
-        ax3.set_xticks(list(range(5)))
-        ax3.set_xticklabels(['Easy','Med','Hard','PhaseRatio','AvailRatio'],
-                            rotation=45, fontsize=8)
+        ax3 = fig.add_subplot(gs_top[i, 3])
+        ax3.set_facecolor("#f5f5f5")
+        info = sb["relative_sizes"] + sb["extra"]
+        ax3.bar(range(5), info, color=["blue", "orange", "purple", "cyan", "magenta"], alpha=0.8)
         if i == 0:
-            ax3.set_title("State Info", fontsize=10)
-        ax3.tick_params(labelsize=8)
+            ax3.set_title("State Info", fontsize=10, fontweight="bold")
+        ax3.set_xticks(range(5))
+        ax3.set_xticklabels(["Easy", "Med", "Hard", "PhaseRatio", "AvailRatio"], rotation=45, fontsize=8)
+        ax3.tick_params(axis="both", labelsize=8)
+        ax3.grid(True, linestyle="--", alpha=0.5)
+        ax3.text(2, max(info)*1.05, f"R={r:.1f}", ha="center", fontsize=8, color="darkred")
 
-    # Bottom block: aggregated view
     phases = list(range(1, num_phases + 1))
-
-    lrs = []
-    usage = []
-    mixratios = []
-    for i in range(num_phases):
-        a = actions[i]
+    lrs, usage, mixrs = [], [], []
+    for a in actions:
         if torch.is_tensor(a):
-            a_cpu = a.detach().cpu()
-            lrs.append(float(a_cpu[0]))
-            usage.append(float(a_cpu[4]))
-            mixratios.append(a_cpu[1:4].tolist())
-        else:
-            lrs.append(float(a[0]))
-            usage.append(float(a[4]))
-            mixratios.append(list(a[1:4]))
-    rews        = [float(r) for r in rewards]
+            a = a.detach().cpu()
+        lrs.append(float(a[0]))
+        usage.append(float(a[4]))
+        mixrs.append([float(x) for x in a[1:4]])
+    rews = [float(r) for r in rewards]
     if rews:
         rews[-1] = rews[-1] / 10.0
 
-    # Learning rate
-    ax_lr = fig.add_subplot(gs_bot[0,0])
-    ax_lr.plot(phases, lrs, marker='o')
-    ax_lr.set_title("Learning Rate", fontsize=10)
-    ax_lr.set_xlabel("Phase", fontsize=9)
-    ax_lr.set_ylabel("LR", fontsize=9)
+    ax_lr = fig.add_subplot(gs_bot[0, 0])
+    ax_lr.set_facecolor("#f5f5f5")
+    ax_lr.plot(phases, lrs, marker="D", linestyle="-", color="blue", markersize=6)
+    ax_lr.set_title("Learning Rate")
+    ax_lr.set_xlabel("Phase")
+    ax_lr.set_ylabel("LR")
     ax_lr.set_xticks(phases)
+    ax_lr.grid(True, linestyle=":", alpha=0.6)
 
-    # Sample usage
-    ax_us = fig.add_subplot(gs_bot[0,1])
-    ax_us.plot(phases, usage, marker='o')
-    ax_us.set_title("Sample Usage", fontsize=10)
-    ax_us.set_xlabel("Phase", fontsize=9)
-    ax_us.set_ylabel("Usage", fontsize=9)
+    ax_us = fig.add_subplot(gs_bot[0, 1])
+    ax_us.set_facecolor("#f5f5f5")
+    ax_us.plot(phases, usage, marker="D", linestyle="-", color="orange", markersize=6)
+    ax_us.set_title("Sample Usage")
+    ax_us.set_xlabel("Phase")
+    ax_us.set_ylabel("Usage")
     ax_us.set_xticks(phases)
+    ax_us.grid(True, linestyle=":", alpha=0.6)
 
-    # Mixing ratios
-    ax_mx = fig.add_subplot(gs_bot[0,2])
+    ax_mx = fig.add_subplot(gs_bot[0, 2])
+    ax_mx.set_facecolor("#f5f5f5")
     bar_w = 0.6
-    for idx, mr in enumerate(mixratios):
-        btm = 0.0
-        ax_mx.bar(idx, mr[0], bottom=btm, width=bar_w, label='Easy' if idx==0 else "")
-        btm += mr[0]
-        ax_mx.bar(idx, mr[1], bottom=btm, width=bar_w, label='Med' if idx==0 else "")
-        btm += mr[1]
-        ax_mx.bar(idx, mr[2], bottom=btm, width=bar_w, label='Hard' if idx==0 else "")
-    ax_mx.set_xticks(list(range(num_phases)))
+    for idx, mr in enumerate(mixrs):
+        bottom = 0.0
+        ax_mx.bar(idx, mr[0], bottom=bottom, width=bar_w, color="green", label="Easy" if idx == 0 else "")
+        bottom += mr[0]
+        ax_mx.bar(idx, mr[1], bottom=bottom, width=bar_w, color="yellow", label="Med" if idx == 0 else "")
+        bottom += mr[1]
+        ax_mx.bar(idx, mr[2], bottom=bottom, width=bar_w, color="red", label="Hard" if idx == 0 else "")
+    ax_mx.set_xticks(range(num_phases))
     ax_mx.set_xticklabels([f"P{p}" for p in phases])
-    ax_mx.set_title("Mixing Ratios", fontsize=10)
-    ax_mx.set_xlabel("Phase", fontsize=9)
-    ax_mx.set_ylabel("Ratio", fontsize=9)
+    ax_mx.set_title("Mixing Ratios")
+    ax_mx.set_xlabel("Phase")
+    ax_mx.set_ylabel("Ratio")
     ax_mx.legend(fontsize=8)
+    ax_mx.grid(True, linestyle=":", alpha=0.6)
 
-    # Reward evolution
-    ax_rw = fig.add_subplot(gs_bot[0,3])
-    ax_rw.plot(phases, rews, marker='o')
-    ax_rw.set_title("Reward", fontsize=10)
-    ax_rw.set_xlabel("Phase", fontsize=9)
-    ax_rw.set_ylabel("Reward", fontsize=9)
+    ax_rw = fig.add_subplot(gs_bot[0, 3])
+    ax_rw.set_facecolor("#f5f5f5")
+    ax_rw.plot(phases, rews, marker="D", linestyle="-", color="magenta", markersize=6)
+    ax_rw.set_title("Reward")
+    ax_rw.set_xlabel("Phase")
+    ax_rw.set_ylabel("Reward")
     ax_rw.set_xticks(phases)
+    ax_rw.grid(True, linestyle=":", alpha=0.6)
 
-    plt.tight_layout()
+    fig.subplots_adjust(top=0.90, bottom=0.05, left=0.05, right=0.98, hspace=0.6, wspace=0.4)
     fname = os.path.join(output_dir, f"{group_name}_episode_{episode['index']}_detailed.png")
     plt.savefig(fname)
     plt.close(fig)
     print(f"Saved detailed figure for {group_name} episode {episode['index']} to {fname}")
-
 # ----- Main Training and Evaluation -----
 
 def main():
@@ -307,17 +296,22 @@ def main():
     critic1_losses = []
     critic2_losses = []
     reward_progress = []
+    reward_stds = []
     eval_updates = []
     num_bins = config["observation"]["num_bins"]
     action_var_history = []   
     update_steps      = []
 
     # Training loop.
+    last_actor_loss = 0.0
+    num_eval_eps = config["rl"].get("num_eval_episodes", 1)
     for update in trange(num_updates, desc="Off‑policy Training"):
         if len(replay_buffer) >= config["rl"]["batch_size"]:
             metrics = agent.update(replay_buffer, config["rl"]["batch_size"])
             if metrics is not None:
-                actor_losses.append(metrics["actor_loss"])
+                if metrics["actor_loss"] is not None:
+                    last_actor_loss = metrics["actor_loss"]
+                actor_losses.append(last_actor_loss)
                 critic1_losses.append(metrics["critic1_loss"])
                 critic2_losses.append(metrics["critic2_loss"])
         with torch.no_grad():
@@ -329,33 +323,41 @@ def main():
         # Every checkpoint_interval (5% of training), run a full evaluation episode
         # and save all plots and model checkpoint.
         if update % checkpoint_interval == 0:
-            eval_states = []
-            eval_actions = []
-            eval_rewards = []
-            obs_eval = env.reset()
-            done = False
-            with tqdm(total=env.max_phases, desc=f"Eval {update}", leave=False) as pbar:
-                while not done:
-                    action_eval = agent.select_action(obs_eval, noise_enable=False)
-                    eval_states.append(obs_eval)
-                    eval_actions.append(action_eval)
-                    obs_eval, reward, done = env.step(action_eval)
-                    eval_rewards.append(reward)
-                    pbar.update(1)
-            total_reward = sum(eval_rewards)
-            reward_progress.append(total_reward)
+            rewards_this_ckpt = []
+            first_episode = None
+            for ep_i in range(num_eval_eps):
+                eval_states = []
+                eval_actions = []
+                eval_rewards = []
+                obs_eval = env.reset()
+                done = False
+                with tqdm(total=env.max_phases, desc=f"Eval {update} Ep{ep_i}", leave=False) as pbar:
+                    while not done:
+                        action_eval = agent.select_action(obs_eval, noise_enable=False)
+                        eval_states.append(obs_eval)
+                        eval_actions.append(action_eval)
+                        obs_eval, reward, done = env.step(action_eval)
+                        eval_rewards.append(reward)
+                        pbar.update(1)
+                total_reward = sum(eval_rewards)
+                rewards_this_ckpt.append(total_reward)
+                if ep_i == 0:
+                    first_episode = {
+                        "index": update,
+                        "states": eval_states,
+                        "actions": eval_actions,
+                        "rewards": eval_rewards,
+                        "total_reward": total_reward,
+                        "episode_length": len(eval_states),
+                    }
+            mean_reward = float(np.mean(rewards_this_ckpt))
+            std_reward = float(np.std(rewards_this_ckpt))
+            reward_progress.append(mean_reward)
+            reward_stds.append(std_reward)
             eval_updates.append(update)
-            print(f"Checkpoint at update {update}/{num_updates} - Full episode evaluation reward: {total_reward}")
-            
-            # Build an evaluation episode dictionary.
-            eval_episode = {
-                "index": update,
-                "states": eval_states,
-                "actions": eval_actions,
-                "rewards": eval_rewards,
-                "total_reward": total_reward,
-                "episode_length": len(eval_states)
-            }
+            print(f"Checkpoint at update {update}/{num_updates} - Eval reward {mean_reward:.2f} ± {std_reward:.2f}")
+
+            eval_episode = first_episode
             
             # Save detailed episode plot.
             plot_episode_figure(eval_episode, f"eval_{update}", num_bins, results_dir)
@@ -379,7 +381,7 @@ def main():
             
             # Save reward progression plot.
             plt.figure()
-            plt.plot(eval_updates, reward_progress, marker='o')
+            plt.errorbar(eval_updates, reward_progress, yerr=reward_stds, marker='o', capsize=3)
             plt.xlabel("Update Steps")
             plt.ylabel("Reward")
             plt.title("Periodic Reward Evaluation")
@@ -479,7 +481,7 @@ def main():
     
     # Plot final reward progression.
     plt.figure()
-    plt.plot(eval_updates, reward_progress, marker='o')
+    plt.errorbar(eval_updates, reward_progress, yerr=reward_stds, marker='o', capsize=3)
     plt.xlabel("Update Steps")
     plt.ylabel("Reward")
     plt.title("Periodic Reward Evaluation")
