@@ -220,7 +220,7 @@ class DDPGAgent:
         # 7) PER priority update if used (use td1)
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            prios = td1.abs().detach().cpu().tolist()
+            prios = td1.abs().detach().cpu().view(-1).tolist()
             new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 
@@ -312,7 +312,7 @@ class DDPGAgent:
         # 8) update priorities
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            prios = td1.abs().detach().cpu().tolist()
+            prios = td1.abs().detach().cpu().view(-1).tolist()
             new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 
