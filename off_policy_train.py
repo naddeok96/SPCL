@@ -161,10 +161,22 @@ def plot_episode_figure(episode, group_name, num_bins, output_dir):
         ax3.tick_params(labelsize=8)
 
     # Bottom block: aggregated view
-    phases      = list(range(1, num_phases+1))
-    lrs         = [actions[i][0] for i in range(num_phases)]
-    usage       = [actions[i][4] for i in range(num_phases)]
-    mixratios   = [actions[i][1:4] for i in range(num_phases)]
+    phases = list(range(1, num_phases + 1))
+
+    lrs = []
+    usage = []
+    mixratios = []
+    for i in range(num_phases):
+        a = actions[i]
+        if torch.is_tensor(a):
+            a_cpu = a.detach().cpu()
+            lrs.append(float(a_cpu[0]))
+            usage.append(float(a_cpu[4]))
+            mixratios.append(a_cpu[1:4].tolist())
+        else:
+            lrs.append(float(a[0]))
+            usage.append(float(a[4]))
+            mixratios.append(list(a[1:4]))
     rews        = [float(r) for r in rewards]
     if rews:
         rews[-1] = rews[-1] / 10.0
