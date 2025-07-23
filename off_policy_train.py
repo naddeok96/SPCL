@@ -18,6 +18,12 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 from tqdm import trange, tqdm
+import time
+
+try:
+    import wandb
+except ImportError:  # pragma: no cover - wandb may not be installed in tests
+    wandb = None
 
 
 from rl_agent import DDPGAgent
@@ -231,10 +237,22 @@ def main():
 
     # config = load_config("config.yaml")
     set_seed(42)
-    
+
     # Create a separate directory for checkpoints/plots.
     results_dir = os.path.join("results", "off_policy")
     os.makedirs(results_dir, exist_ok=True)
+
+    # Setup Weights & Biases logging if available
+    if wandb is not None:
+        wandb.init(project="off_policy_training", config=config)
+    else:  # pragma: no cover - warn if wandb missing
+        print("wandb not installed; proceeding without online logging")
+
+    # Paths for hourly checkpoint overwriting
+    hourly_actor = os.path.join(results_dir, "off_policy_actor_latest.pth")
+    hourly_critic1 = os.path.join(results_dir, "off_policy_critic1_latest.pth")
+    hourly_critic2 = os.path.join(results_dir, "off_policy_critic2_latest.pth")
+    last_hour_save = time.time()
     
     # Load dataset (must be a .pt saved via torch.save)
     dataset_path = config["paths"]["pretrain_path"]
@@ -314,11 +332,26 @@ def main():
                 actor_losses.append(last_actor_loss)
                 critic1_losses.append(metrics["critic1_loss"])
                 critic2_losses.append(metrics["critic2_loss"])
+                if wandb is not None:
+                    wandb.log({
+                        "actor_loss": last_actor_loss,
+                        "critic1_loss": metrics["critic1_loss"],
+                        "critic2_loss": metrics["critic2_loss"],
+                        "update": update,
+                    })
         with torch.no_grad():
             pred_actions = agent.actor(variance_states_tensor).cpu() # (256,5)
         var = torch.var(pred_actions, dim=0, unbiased=False)  # length‑5 vector
         action_var_history.append(var.tolist())
         update_steps.append(update)
+
+        # Hourly checkpoint save
+        if time.time() - last_hour_save >= 3600:
+            torch.save(agent.actor.state_dict(), hourly_actor)
+            torch.save(agent.critic1.state_dict(), hourly_critic1)
+            torch.save(agent.critic2.state_dict(), hourly_critic2)
+            print(f"Hourly checkpoint saved at update {update}")
+            last_hour_save = time.time()
         
         # Every checkpoint_interval (5% of training), run a full evaluation episode
         # and save all plots and model checkpoint.
@@ -356,6 +389,12 @@ def main():
             reward_stds.append(std_reward)
             eval_updates.append(update)
             print(f"Checkpoint at update {update}/{num_updates} - Eval reward {mean_reward:.2f} ± {std_reward:.2f}")
+            if wandb is not None:
+                wandb.log({
+                    "eval_mean_reward": mean_reward,
+                    "eval_std_reward": std_reward,
+                    "update": update,
+                })
 
             eval_episode = first_episode
             
@@ -489,6 +528,10 @@ def main():
     plt.savefig(final_reward_plot)
     plt.close()
     print(f"Final reward progression plot saved to {final_reward_plot}")
+
+    if wandb is not None:
+        wandb.log({"final_total_reward": total_reward})
+        wandb.finish()
 
 if __name__ == "__main__":
     main()
