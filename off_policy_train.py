@@ -301,11 +301,10 @@ def main():
     idxs = perm[:probe_batch_size]
     variance_states_tensor = states[idxs].to(agent.device).float()
 
-    # Prepare for checkpointing.
+    # Prepare for training and evaluation intervals.
     num_updates = config["rl"].get("off_policy_updates", int(1e6))
-    checkpoint_interval = int(num_updates * 0.2)
-    if checkpoint_interval == 0:
-        checkpoint_interval = 1
+    evaluation_interval = max(1, num_updates // 100)  # 100 evaluations total
+    checkpoint_interval = max(1, num_updates // 20)   # save model every 5%
     print(f"Starting off-policy training for {num_updates} updates")
 
     # Lists for tracking metrics over training.
@@ -357,9 +356,8 @@ def main():
             print(f"Hourly checkpoint saved at update {update}")
             last_hour_save = time.time()
         
-        # Every checkpoint_interval (5% of training), run a full evaluation episode
-        # and save all plots and model checkpoint.
-        if update % checkpoint_interval == 0:
+        # Periodically evaluate the policy without saving a model checkpoint.
+        if update % evaluation_interval == 0:
             rewards_this_ckpt = []
             first_episode = None
             for ep_i in range(num_eval_eps):
@@ -446,16 +444,17 @@ def main():
             plt.savefig(checkpoint_reward_path)
             plt.close()
             
-            # Save model checkpoint.
-            actor_ckpt = os.path.join(results_dir, f"off_policy_actor_{update}.pth")
-            torch.save(agent.actor.state_dict(), actor_ckpt)
-            print(f"Saved actor → {actor_ckpt}")
-            crit1_ckpt = os.path.join(results_dir, f"off_policy_critic1_{update}.pth")
-            crit2_ckpt = os.path.join(results_dir, f"off_policy_critic2_{update}.pth")
-            torch.save(agent.critic1.state_dict(), crit1_ckpt)
-            torch.save(agent.critic2.state_dict(), crit2_ckpt)
-            print(f"Saved critic1 → {crit1_ckpt}")
-            print(f"Saved critic2 → {crit2_ckpt}")
+            # Save model checkpoint every checkpoint_interval
+            if update % checkpoint_interval == 0:
+                actor_ckpt = os.path.join(results_dir, f"off_policy_actor_{update}.pth")
+                torch.save(agent.actor.state_dict(), actor_ckpt)
+                crit1_ckpt = os.path.join(results_dir, f"off_policy_critic1_{update}.pth")
+                crit2_ckpt = os.path.join(results_dir, f"off_policy_critic2_{update}.pth")
+                torch.save(agent.critic1.state_dict(), crit1_ckpt)
+                torch.save(agent.critic2.state_dict(), crit2_ckpt)
+                print(f"Saved actor → {actor_ckpt}")
+                print(f"Saved critic1 → {crit1_ckpt}")
+                print(f"Saved critic2 → {crit2_ckpt}")
 
             # plot action‐component variances
             action_var_array = torch.tensor(action_var_history)  # shape (steps,5)
