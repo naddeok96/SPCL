@@ -1,5 +1,5 @@
 # Compute device for training. Change to "cpu" if no GPU is available.
-device: "cuda:5"
+device: "cuda:4"
 
 fractions:
   easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
@@ -30,7 +30,7 @@ rl:
 
   pretrain_bc_iters:       100000
   pretrain_critic_iters:   100000
-  off_policy_updates:      10000
+  off_policy_updates:      1000000
 
   policy_delay: 2
   policy_noise: 0.2
@@ -38,7 +38,7 @@ rl:
 
   on_policy_episodes:            10000
   on_policy_updates_per_episode: 1
-  batch_size:                    256
+  batch_size:                    512
   probe_from_ea:                 true
   probe_batch_size:              128
   num_parallel_students:         1000
@@ -60,6 +60,7 @@ rl:
   use_behavioral_cloning:    true
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
+  bc_top_percent:            0.5 # Only keep top 0.5%
   bc_reward_threshold:       0.5
   bc_percentile:             0.75
   use_triplet_loss:          true
