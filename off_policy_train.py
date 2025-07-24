@@ -311,6 +311,9 @@ def main():
     actor_losses = []
     critic1_losses = []
     critic2_losses = []
+    actor_lrs = []
+    critic1_lrs = []
+    critic2_lrs = []
     reward_progress = []
     reward_stds = []
     eval_updates = []
@@ -335,11 +338,17 @@ def main():
                 actor_losses.append(last_actor_loss)
                 critic1_losses.append(metrics["critic1_loss"])
                 critic2_losses.append(metrics["critic2_loss"])
+                actor_lrs.append(agent.actor_optimizer.param_groups[0]["lr"])
+                critic1_lrs.append(agent.critic1_optimizer.param_groups[0]["lr"])
+                critic2_lrs.append(agent.critic2_optimizer.param_groups[0]["lr"])
                 if wandb is not None:
                     wandb.log({
                         "actor_loss": last_actor_loss,
                         "critic1_loss": metrics["critic1_loss"],
                         "critic2_loss": metrics["critic2_loss"],
+                        "actor_lr": actor_lrs[-1],
+                        "critic1_lr": critic1_lrs[-1],
+                        "critic2_lr": critic2_lrs[-1],
                         "update": update,
                     })
         with torch.no_grad():
@@ -443,6 +452,20 @@ def main():
             checkpoint_reward_path = os.path.join(results_dir, f"reward_progress_{update}.png")
             plt.savefig(checkpoint_reward_path)
             plt.close()
+
+            # Plot learning rate schedule
+            fig_lr = plt.figure()
+            plt.plot(actor_lrs, label='Actor')
+            plt.plot(critic1_lrs, label='Critic1')
+            plt.plot(critic2_lrs, label='Critic2')
+            plt.xlabel('Update Steps')
+            plt.ylabel('Learning Rate')
+            plt.title('Learning Rate Progression')
+            plt.legend()
+            checkpoint_lr_path = os.path.join(results_dir, f"learning_rates_{update}.png")
+            fig_lr.tight_layout()
+            fig_lr.savefig(checkpoint_lr_path)
+            plt.close(fig_lr)
             
             # Save model checkpoint every checkpoint_interval
             if update % checkpoint_interval == 0:
@@ -549,6 +572,21 @@ def main():
     plt.savefig(final_reward_plot)
     plt.close()
     print(f"Final reward progression plot saved to {final_reward_plot}")
+
+    # Plot final learning rate progression
+    plt.figure()
+    plt.plot(actor_lrs, label='Actor')
+    plt.plot(critic1_lrs, label='Critic1')
+    plt.plot(critic2_lrs, label='Critic2')
+    plt.xlabel('Update Steps')
+    plt.ylabel('Learning Rate')
+    plt.title('Learning Rate Progression')
+    plt.legend()
+    final_lr_plot = os.path.join(results_dir, 'learning_rates_final.png')
+    plt.tight_layout()
+    plt.savefig(final_lr_plot)
+    plt.close()
+    print(f"Final learning rate plot saved to {final_lr_plot}")
 
     if wandb is not None:
         wandb.log({"final_total_reward": total_reward})
