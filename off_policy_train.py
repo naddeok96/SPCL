@@ -276,10 +276,9 @@ def main():
     action_dim = 5
     agent = DDPGAgent(obs_dim, action_dim, config)
 
-    top_percent = config["rl"].get("bc_top_percent", 10)
+    elite_fraction = config["rl"].get("elite_fraction", 0.1)
+    top_percent = elite_fraction * 100
     elite_data = select_top_percent(dataset, top_percent)
-
-    elite_fraction = top_percent / 100.0
     replay_buffer = build_augmented_replay_buffer(
         elite_data,
         dataset,
@@ -287,8 +286,8 @@ def main():
         elite_fraction,
         config["device"],
         use_per=config["rl"].get("per_enabled", False),
-        per_alpha=config["rl"].get("per_alpha", 0.6),
-        per_beta=config["rl"].get("per_beta", 0.4),
+        per_alpha=config["rl"].get("per_alpha", 0.4),
+        per_beta=config["rl"].get("per_beta", 0.6),
         per_epsilon=config["rl"].get("per_epsilon", 1e-6),
         per_type=config["rl"].get("per_type", "proportional"),
     )
@@ -317,12 +316,17 @@ def main():
     reward_stds = []
     eval_updates = []
     num_bins = config["observation"]["num_bins"]
-    action_var_history = []   
+    action_var_history = []
     update_steps      = []
+
+    best_mean_reward = -float("inf")
+    no_improve = 0
+    early_stop = config["rl"].get("early_stop_patience")
 
     # Training loop.
     last_actor_loss = 0.0
     num_eval_eps = config["rl"].get("num_eval_episodes", 1)
+    stop_training = False
     for update in trange(num_updates, desc="Off‑policy Training"):
         if len(replay_buffer) >= config["rl"]["batch_size"]:
             metrics = agent.update(replay_buffer, config["rl"]["batch_size"])
@@ -397,6 +401,20 @@ def main():
                 })
 
             eval_episode = first_episode
+
+            if mean_reward > best_mean_reward:
+                best_mean_reward = mean_reward
+                torch.save(agent.actor.state_dict(), os.path.join(results_dir, "best_actor.pth"))
+                torch.save(agent.critic1.state_dict(), os.path.join(results_dir, "best_critic1.pth"))
+                torch.save(agent.critic2.state_dict(), os.path.join(results_dir, "best_critic2.pth"))
+                no_improve = 0
+            else:
+                no_improve += 1
+
+            if early_stop is not None and no_improve >= early_stop:
+                print(f"Early stopping at update {update} due to no improvement")
+                stop_training = True
+                break
             
             # Save detailed episode plot.
             plot_episode_figure(eval_episode, f"eval_{update}", num_bins, results_dir)
@@ -457,6 +475,9 @@ def main():
             plt.tight_layout()
             plt.savefig(os.path.join(results_dir, "action_variance.png"))
             plt.close()
+
+        if stop_training:
+            break
                 
     # After training, run one final full evaluation episode.
     eval_states = []
@@ -475,8 +496,9 @@ def main():
     total_reward = sum(eval_rewards)
     print(f"Final evaluation episode total reward: {total_reward}")
     
+    final_index = update if stop_training else num_updates
     eval_episode = {
-        "index": num_updates,
+        "index": final_index,
         "states": eval_states,
         "actions": eval_actions,
         "rewards": eval_rewards,
