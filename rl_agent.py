@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn.utils as utils
+from torch.optim.lr_scheduler import StepLR
 
 # Define the Actor network.
 class Actor(nn.Module):
@@ -104,12 +105,20 @@ class DDPGAgent:
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=config["rl"]["critic_lr"])
         self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=config["rl"]["critic_lr"])
 
+        # learning rate schedulers
+        step = config["rl"].get("lr_decay_steps", 200000)
+        gamma = config["rl"].get("lr_decay_rate", 0.5)
+        self.actor_scheduler = StepLR(self.actor_optimizer, step_size=step, gamma=gamma)
+        self.critic1_scheduler = StepLR(self.critic1_optimizer, step_size=step, gamma=gamma)
+        self.critic2_scheduler = StepLR(self.critic2_optimizer, step_size=step, gamma=gamma)
+
         # noise & counters
         self.ou_noise = OUNoise(action_dim, device=self.device)
         self.total_it = 0
         
         # save for annealing
         self.exploration_noise_initial = config["rl"]["exploration_noise"]
+        self.exploration_noise_decay_steps = config["rl"].get("exploration_noise_decay_steps", 300000)
         self.exploration_noise = self.exploration_noise_initial
         self.policy_delay   = config["rl"].get("policy_delay", 2)
         self.policy_noise   = config["rl"].get("policy_noise", 0.2)
@@ -210,17 +219,22 @@ class DDPGAgent:
         loss1.backward()
         utils.clip_grad_norm_(self.critic1.parameters(), 1.0)
         self.critic1_optimizer.step()
+        self.critic1_scheduler.step()
 
         # 6) Backprop critic2
         self.critic2_optimizer.zero_grad()
         loss2.backward()
         utils.clip_grad_norm_(self.critic2.parameters(), 1.0)
         self.critic2_optimizer.step()
+        self.critic2_scheduler.step()
+
+        # still step actor scheduler for time-based decay
+        self.actor_scheduler.step()
 
         # 7) PER priority update if used (use td1)
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            prios = td1.abs().detach().cpu().tolist()
+            prios = td1.abs().detach().cpu().view(-1).tolist()
             new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 
@@ -283,11 +297,13 @@ class DDPGAgent:
         loss1.backward()
         utils.clip_grad_norm_(self.critic1.parameters(),1.0)
         self.critic1_optimizer.step()
+        self.critic1_scheduler.step()
 
         self.critic2_optimizer.zero_grad()
         loss2.backward()
         utils.clip_grad_norm_(self.critic2.parameters(),1.0)
         self.critic2_optimizer.step()
+        self.critic2_scheduler.step()
 
         # 6) delayed actor & target updates
         actor_loss = None
@@ -303,16 +319,17 @@ class DDPGAgent:
             self._soft_update(self.critic1_target, self.critic1)
             self._soft_update(self.critic2_target, self.critic2)
 
-        # 7) anneal exploration noise
-        self.exploration_noise = max(
-            0.05,
-            self.exploration_noise_initial * (1 - self.total_it/self.max_updates)
-        )
+        self.actor_scheduler.step()
+
+        # 7) anneal exploration noise linearly to zero
+        decay_steps = max(1, self.exploration_noise_decay_steps)
+        decay = max(0.0, 1 - self.total_it / decay_steps)
+        self.exploration_noise = self.exploration_noise_initial * decay
 
         # 8) update priorities
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
-            prios = td1.abs().detach().cpu().tolist()
+            prios = td1.abs().detach().cpu().view(-1).tolist()
             new_prios = [p + eps for p in prios]
             replay_buffer.update_priorities(idxs, new_prios)
 

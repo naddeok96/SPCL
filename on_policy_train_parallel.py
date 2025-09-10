@@ -139,7 +139,7 @@ def train_group(vec_model: ParallelMLP, env: CurriculumEnv, hyper_list: List[dic
     opt = torch.optim.Adam(vec_model.parameters(), lr=sum(hp["learning_rate"] for hp in hyper_list) / len(hyper_list))
     crit = nn.CrossEntropyLoss(reduction="none")
     vec_model.train()
-    for imgs, labels in loader:
+    for imgs, labels in tqdm(loader, desc="Group Train", leave=False):
         # Loader returns [batch, num_models, ...]; swap to [num_models, batch, ...]
         imgs = imgs.to(device).transpose(0, 1)
         labels = labels.to(device).transpose(0, 1)
@@ -153,7 +153,9 @@ def train_group(vec_model: ParallelMLP, env: CurriculumEnv, hyper_list: List[dic
     ea, _ = eval_loader_batched(vec_model, env.easy_loader, device, env.num_bins)
     ma, _ = eval_loader_batched(vec_model, env.medium_loader, device, env.num_bins)
     ha, _ = eval_loader_batched(vec_model, env.hard_loader, device, env.num_bins)
-    return ((ea + ma + ha) / 3.0).tolist()
+    accs = ((ea + ma + ha) / 3.0).tolist()
+    print(f"Group training complete — mean accuracy: {accs}")
+    return accs
 
 
 def main():
@@ -176,6 +178,10 @@ def main():
         d: ParallelMLP([model_cfgs[i] for i in idxs]).to(env.device)
         for d, idxs in depth_groups.items()
     }
+    print(
+        f"Initialized {num_students} student models across "
+        f"{len(depth_groups)} depth groups"
+    )
 
     if cfg["rl"].get("per_enabled", False):
         replay_buffer = PERBuffer(
@@ -239,6 +245,7 @@ def main():
             agent.update(replay_buffer, batch_size)
 
         if ep % max(1, int(num_episodes * 0.1)) == 0:
+            print(f"Completed episode {ep}/{num_episodes}")
             for d, idxs in depth_groups.items():
                 vec = group_models[d]
                 for li, gi in enumerate(idxs):
@@ -258,7 +265,10 @@ def main():
                             m.weight.data.copy_(w)
                             m.bias.data.copy_(b)
                             li2 += 1
+
                     torch.save(single.state_dict(), os.path.join(ckpt_dir, f"student_{gi}_ep{ep}.pt"))
+
+    print("Parallel on-policy training complete.")
 
 
 if __name__ == "__main__":

@@ -149,13 +149,19 @@ class CurriculumEnv:
         avail = torch.tensor(self.remaining_samples/self.train_samples_max, device=self.device).unsqueeze(0)
         return torch.cat([obs, phase, avail], dim=0)
 
-    def reset(self):
-        # Sample fractions
-        easy = random.uniform(self.easy_lower, self.easy_upper)
-        max_med = min(easy, 1.0-easy-self.hard_min)
-        min_med = max(self.medium_lower, (1.0-easy)/2)
-        self.easy_frac = easy
-        self.medium_frac = (min_med+max_med)/2 if max_med<=min_med else random.uniform(min_med, max_med)
+    def reset(self, easy_frac: float | None = None, medium_frac: float | None = None):
+        """Reset the environment. Optionally specify dataset fractions."""
+        if easy_frac is None or medium_frac is None:
+            easy = random.uniform(self.easy_lower, self.easy_upper)
+            max_med = min(easy, 1.0 - easy - self.hard_min)
+            min_med = max(self.medium_lower, (1.0 - easy) / 2)
+            self.easy_frac = easy
+            self.medium_frac = (
+                (min_med + max_med) / 2 if max_med <= min_med else random.uniform(min_med, max_med)
+            )
+        else:
+            self.easy_frac = easy_frac
+            self.medium_frac = medium_frac
 
         # Update subset indices
         e_idx, m_idx, h_idx = self._generate_splits()
@@ -204,6 +210,7 @@ class CurriculumEnv:
             opt.zero_grad(); loss = criterion(self.model(x), y); loss.backward(); opt.step()
 
         return self.get_observation()
+
 
     def step(self, action):
         a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32)

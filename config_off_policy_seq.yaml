@@ -1,5 +1,5 @@
 # Compute device for training. Change to "cpu" if no GPU is available.
-device: "cuda:5"
+device: "cuda:4"
 
 fractions:
   easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
@@ -30,38 +30,46 @@ rl:
 
   pretrain_bc_iters:       100000
   pretrain_critic_iters:   100000
-  off_policy_updates:      10000
+  off_policy_updates:      1000000
 
-  policy_delay: 2
+  policy_delay: 4
   policy_noise: 0.2
-  noise_clip:   0.5
+  noise_clip:   0.1
 
   on_policy_episodes:            10000
   on_policy_updates_per_episode: 1
-  batch_size:                    256
+  batch_size:                    512
   probe_from_ea:                 true
   probe_batch_size:              128
   num_parallel_students:         1000
 
   actor_lr:  0.0003
   critic_lr: 0.001
+  lr_decay_steps: 200000
+  lr_decay_rate: 0.5
 
   gamma: 0.99
-  tau:   0.005
+  tau:   0.001
 
   exploration_noise: 0.2
+  exploration_noise_decay_steps: 300000
 
   per_enabled: true
   per_type:    "proportional"
-  per_alpha:   0.6
-  per_beta:    0.4
+  per_alpha:   0.4
+  per_beta:    0.6
   per_epsilon: 1e-6
+
+  elite_fraction: 0.02
+  num_eval_episodes: 5
+  early_stop_patience: 10
 
   use_behavioral_cloning:    true
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
+  bc_top_percent:            0.5 # Only keep top 0.5%
   bc_reward_threshold:       0.5
-  bc_percentile:             80
+  bc_percentile:             0.75
   use_triplet_loss:          true
   triplet_margin:            0.2
   pretrain_critic_offpolicy: true
@@ -75,7 +83,7 @@ observation:
 paths:
   save_path:                  "results/curriculum_rl"
   data_path:                  "./data"
-  pretrain_path:              "results/curriculum_rl/evolutionary_dataset.pt"
+  pretrain_path:              "/data/naddeok/spcl/merged_history.pt"
   off_policy_actor_model:     "results/off_policy/off_policy_actor_model_final.pth"
   off_policy_critic1_model:   "results/off_policy/off_policy_critic1_model_final.pth"
   off_policy_critic2_model:   "results/off_policy/off_policy_critic2_model_final.pth"
