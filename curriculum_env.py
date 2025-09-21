@@ -211,17 +211,25 @@ class CurriculumEnv:
 
         return self.get_observation()
 
-
     def step(self, action):
-        a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32)
+        a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32, device=self.device)
         lr, mix, frac = float(a[0]), a[1:4], float(a[4])
-        num = int(frac * self.remaining_samples)
-        hp = {"training_samples": num, "learning_rate": lr,
-              "mixture_ratio": mix.tolist(), "phase_batch_size": self.batch_size}
-        reward = run_phase_training(self.model, self.easy_loader, self.medium_loader, self.hard_loader, hp, self.device)
-        self.remaining_samples -= num; self.current_phase += 1
-        if self.current_phase>=self.max_phases or self.remaining_samples<=0 or frac<=0:
-            reward *= 10; done = True
-        else:
-            done = False
-        return self.get_observation(), reward, done
+        num = int(max(0.0, min(1.0, frac)) * self.remaining_samples)
+
+        hp = {
+            "training_samples": num,
+            "learning_rate": lr,
+            "mixture_ratio": mix.tolist(),
+            "phase_batch_size": self.batch_size,
+        }
+
+        macro_acc = run_phase_training(self.model, self.easy_loader, self.medium_loader, self.hard_loader, hp, self.device)
+
+        self.remaining_samples -= num
+        self.current_phase += 1
+        done = (self.current_phase >= self.max_phases) or (self.remaining_samples <= 0) or (frac <= 0)
+
+        terminal_scale = 1.0  # set to 10.0 if you want a bigger payout
+        r = float(macro_acc) * terminal_scale if done else 0.0
+
+        return self.get_observation(), r, done
