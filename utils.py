@@ -1,3 +1,7 @@
+#==========================================
+# File: utils.py
+#==========================================
+
 """
 Utility functions for computing loss histograms, constructing observation vectors,
 and other helper methods.
@@ -14,7 +18,7 @@ _ALPHA    = 2.0
 _edges_cache = {}
 
 def _get_bin_edges(num_bins: int, device: torch.device):
-    key = (num_bins, device)
+    key = (num_bins, str(device))
     if key not in _edges_cache:
         rel = torch.linspace(0.0, 1.0, steps=num_bins+1, device=device)
         _edges_cache[key] = (rel ** _ALPHA) * _MAX_LOSS
@@ -78,30 +82,8 @@ def compute_dual_loss_histograms(losses_correct, losses_incorrect, num_bins: int
     return hist_c, hist_i, edges
 
 def plot_histogram(hist, edges=None, title=None, filename=None):
-    plt.figure()
-    vals = hist.cpu().tolist()
-    if edges is not None:
-        e = edges.cpu().tolist()
-        centers = [(e[i]+e[i+1])/2 for i in range(len(e)-1)]
-        widths  = [(e[i+1]-e[i])    for i in range(len(e)-1)]
-        plt.bar(centers, vals, width=widths, align="center")
-        plt.xticks(e, rotation=45)
-    else:
-        plt.bar(range(len(vals)), vals)
-    if title:    plt.title(title)
-    plt.xlabel("Loss bin"); plt.ylabel("Freq")
-    plt.tight_layout()
-    if filename: plt.savefig(filename)
-    plt.close()
-def plot_histogram(hist, edges=None, title=None, filename=None):
     """
     Plot a normalized histogram (Tensor) with optional variable-width bins.
-
-    Args:
-        hist (torch.Tensor): Length-N tensor of frequencies.
-        edges (torch.Tensor or None): Length-(N+1) tensor of bin edges.
-        title (str or None): Plot title.
-        filename (str or None): If given, save to this path.
     """
     plt.figure()
     hist_vals = hist.cpu().tolist()
@@ -127,18 +109,7 @@ def plot_histogram(hist, edges=None, title=None, filename=None):
 
 
 def select_top_percent(dataset, percent):
-    """Select transitions from the top ``percent``% highest-reward trajectories.
-
-    Args:
-        dataset (dict): Mapping with keys ``states``, ``actions``, ``rewards``,
-            ``next_states`` and ``dones`` storing tensors for a set of episodes.
-        percent (float): Value in ``[0, 100]`` determining how many of the best
-            trajectories to keep based on summed episode reward.
-
-    Returns:
-        dict: Subset of ``dataset`` containing only the transitions belonging to
-        the selected top trajectories.
-    """
+    """Select transitions from the top ``percent``% highest-reward trajectories."""
     rewards = dataset["rewards"].cpu()
     dones = dataset["dones"].cpu()
 
@@ -176,22 +147,7 @@ def select_top_percent(dataset, percent):
 
 
 def behavior_clone(policy, expert_data, epochs=5, batch_size=64, weight_decay=1e-4, device=None):
-    """Fit ``policy`` to ``expert_data`` using supervised learning.
-
-    The policy is trained with dropout active and L2 weight decay.  A simple
-    mean-squared-error loss is minimized over ``epochs`` passes through the
-    dataset.
-
-    Args:
-        policy (nn.Module): Policy network mapping states to actions.
-        expert_data (dict): Dataset containing ``states`` and ``actions`` of the
-            expert trajectories.
-        epochs (int): Number of training epochs.
-        batch_size (int): Mini-batch size.
-        weight_decay (float): Weight decay coefficient for the optimizer.
-        device (torch.device or str, optional): Device for computation.  If not
-            given, inferred from ``policy`` parameters.
-    """
+    """Fit ``policy`` to ``expert_data`` using supervised learning."""
     import torch.nn as nn
     import torch.optim as optim
     from torch.utils.data import DataLoader, TensorDataset
@@ -217,19 +173,7 @@ def behavior_clone(policy, expert_data, epochs=5, batch_size=64, weight_decay=1e
 
 
 def tune_value_function(policy, value_net, data_loader, config):
-    """Train ``value_net`` off-policy with a CQL regularizer.
-
-    The policy is frozen during this procedure.  Targets are computed using the
-    current policy and discount factor ``gamma`` from ``config``.  A simplified
-    conservative-Q (CQL) penalty discourages overestimation of unseen actions.
-
-    Args:
-        policy (nn.Module): Actor network.
-        value_net (nn.Module): Critic/value function network.
-        data_loader (DataLoader): Yields batches of ``(s, a, r, ns, d)``.
-        config (dict): Configuration with keys ``gamma``, ``critic_lr`` and
-            optional ``cql_alpha``.
-    """
+    """Train ``value_net`` off-policy with a CQL regularizer."""
     import torch.nn.functional as F
     import torch.optim as optim
 
@@ -249,7 +193,6 @@ def tune_value_function(policy, value_net, data_loader, config):
         rewards = rewards.to(device).unsqueeze(1)
         next_states = next_states.to(device)
         dones = dones.to(device).unsqueeze(1)
-        # Cast bool tensors to float for arithmetic operations
         if dones.dtype == torch.bool:
             dones = dones.float()
 
@@ -273,11 +216,3 @@ def tune_value_function(policy, value_net, data_loader, config):
         optimiser.zero_grad()
         loss.backward()
         optimiser.step()
-
-
-
-
-
-
-
-
