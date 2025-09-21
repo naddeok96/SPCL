@@ -30,7 +30,7 @@ rl:
 
   pretrain_bc_iters:       100000
   pretrain_critic_iters:   100000
-  off_policy_updates:      1000000
+  off_policy_updates:      100000000
 
   policy_delay: 4
   policy_noise: 0.2
@@ -48,7 +48,7 @@ rl:
   lr_decay_steps: 200000
   lr_decay_rate: 0.5
 
-  gamma: 0.99
+  gamma: 0.995
   tau:   0.001
 
   exploration_noise: 0.2
@@ -67,7 +67,9 @@ rl:
   use_behavioral_cloning:    true
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
-  bc_top_percent:            0.5 # Only keep top 0.5%
+  bc_top_percent:            20
+  bc_epochs: 5
+  bc_batch_size: 256
   bc_reward_threshold:       0.5
   bc_percentile:             0.75
   use_triplet_loss:          true
@@ -75,7 +77,15 @@ rl:
   pretrain_critic_offpolicy: true
 
   seed_replay_buffer: true
-  buffer_size:         1000000
+  buffer_size:         14136870
+
+  entropy_beta: 1.0e-3     # try 1e-3 to 3e-3
+  usage_entropy_beta: 1.0e-3     # encourage usage away from 0/1
+  lr_center_penalty:  1.0e-3     # discourage LR hugging the bounds
+  usage_penalty:      1e-3        
+  target_usage:       0.5
+  cql_alpha:          0.001
+  cql_num_samples: 10 
 
 observation:
   num_bins: 16
