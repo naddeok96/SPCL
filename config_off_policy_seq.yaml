@@ -67,7 +67,7 @@ rl:
   use_behavioral_cloning:    true
   bc_trajectory_selection:   "top_k"
   bc_top_k:                  250
-  bc_top_percent:            20
+  bc_top_percent:            0.5 # Top 0.5% 
   bc_epochs: 5
   bc_batch_size: 256
   bc_reward_threshold:       0.5
