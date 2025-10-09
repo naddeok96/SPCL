@@ -84,8 +84,12 @@ rl:
   lr_center_penalty:  1.0e-3     # discourage LR hugging the bounds
   usage_penalty:      1e-3        
   target_usage:       0.5
-  cql_alpha:          0.001
-  cql_num_samples: 10 
+  td3bc_lambda: 2.5        # 0.0 disables TD3+BC; typical 1..10
+  td3bc_qfilter: true      # only apply BC where Q(data) >= Q(policy)
+  cql_alpha:          0.003         # try {0.001, 0.003, 0.01}
+  cql_num_samples: 10      # you already have this; keep 10-20
+  mmd_lambda: 0.0
+  mmd_sigma: 0.2
 
 observation:
   num_bins: 16
@@ -103,6 +107,7 @@ paths:
   on_policy_critic1_model:  "results/seq_on_policy/seq_on_policy_critic1_model_final.pth"
   on_policy_critic2_model:  "results/seq_on_policy/seq_on_policy_critic2_model_final.pth"
   on_policy_parallel_dir: "results/on_policy_parallel"
+  replay_cache_path: null   # set to a filepath (e.g. "./cache/replay_buffer.pt") to enable replay caching
 
 compare_models:
   Off Policy Start:
@@ -115,9 +120,6 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
-
-
-
 
 
 
