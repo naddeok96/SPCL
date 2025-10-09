@@ -108,6 +108,10 @@ class DDPGAgent:
         self.noise_clip   = config["rl"].get("noise_clip", 0.5)
         self.max_updates  = max(1, int(config["rl"]["off_policy_updates"]))
 
+        # --- TD3+BC knobs ---
+        self.td3bc_lambda = float(self.config["rl"].get("td3bc_lambda", 0.0))
+        self.td3bc_qfilter = bool(self.config["rl"].get("td3bc_qfilter", True))
+
         # exploration noise anneal
         self.exploration_noise_initial = config["rl"]["exploration_noise"]
         self.exploration_noise_decay_steps = config["rl"].get("exploration_noise_decay_steps", 300000)
@@ -161,7 +165,7 @@ class DDPGAgent:
         # PER beta anneal before sampling
         if self.config["rl"].get("per_enabled", False) and hasattr(replay_buffer, "set_beta"):
             beta0 = float(self.config["rl"].get("per_beta", 0.6))
-            t = min(1.0, self.total_it / self.max_updates)
+            t = min(1.0, (self.total_it / self.max_updates) ** 0.5)
             replay_buffer.set_beta(beta0 + (1.0 - beta0) * t)
 
         if self.config["rl"].get("per_enabled", False):
@@ -195,56 +199,57 @@ class DDPGAgent:
         td1 = cq1 - y; td2 = cq2 - y
         
         # --- Conservative Q-Learning (small coefficient) ---
-        cql_alpha = float(self.config["rl"].get("cql_alpha", 1e-3))  # 1e-4..3e-3
+        cql_alpha = float(self.config["rl"].get("cql_alpha", 1e-3))
         if cql_alpha > 0.0:
             K = int(self.config["rl"].get("cql_num_samples", 10))
             lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
 
-            # Sample K random actions per state in the legal box → (B,K,A)
+            # Random K samples
             rand = torch.rand(s.size(0), K, a.size(1), device=s.device)
-            rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]        # LR in range
+            rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]
             mix = rand[..., 1:4].clamp(min=0.0)
-            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)           # project to simplex
+            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)
             rand[..., 1:4] = mix
-            rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)                      # usage in [0,1]
+            rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)
 
-            # Q(s, a_rand) → (B,K,1)
-            s_tile = s.unsqueeze(1).expand(-1, K, -1).reshape(-1, s.size(1))
-            rand_flat = rand.reshape(-1, a.size(1))
-            q_rand1 = self.critic1(s_tile, rand_flat).reshape(-1, K, 1).squeeze(-1)
-            q_rand2 = self.critic2(s_tile, rand_flat).reshape(-1, K, 1).squeeze(-1)
-
-            # Per-state logsumexp over K
-            lse1 = torch.logsumexp(q_rand1, dim=1).mean()
-            lse2 = torch.logsumexp(q_rand2, dim=1).mean()
-
-            # "Data/policy" term: encourage Q(s, a_data) & Q(s, π(s)) to be large
+            # Also include current policy action and a noisy variant
             with torch.no_grad():
                 a_pi = self.actor(s)
-                # clamp & re-normalize (same rules)
                 a_pi[:, 0:1] = a_pi[:, 0:1].clamp(lr_min, lr_max)
                 mix_pi = a_pi[:, 1:4].clamp(min=0.0)
                 a_pi[:, 1:4] = mix_pi / mix_pi.sum(dim=1, keepdim=True).clamp(min=1e-6)
                 a_pi[:, 4:5] = a_pi[:, 4:5].clamp(0.0, 1.0)
 
-            q_data1 = self.critic1(s, a).mean()
-            q_pi1   = self.critic1(s, a_pi).mean()
-            q_data2 = self.critic2(s, a).mean()
-            q_pi2   = self.critic2(s, a_pi).mean()
+                a_noisy = a_pi + (torch.randn_like(a_pi) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
+                a_noisy[:, 0:1] = a_noisy[:, 0:1].clamp(lr_min, lr_max)
+                m2 = a_noisy[:, 1:4].clamp(min=0.0)
+                a_noisy[:, 1:4] = m2 / m2.sum(dim=1, keepdim=True).clamp(min=1e-6)
+                a_noisy[:, 4:5] = a_noisy[:, 4:5].clamp(0.0, 1.0)
 
-            # Conservative penalty
-            cql1 = (lse1 - 0.5 * (q_data1 + q_pi1))
-            cql2 = (lse2 - 0.5 * (q_data2 + q_pi2))
+            cand = torch.cat([rand, a_pi.unsqueeze(1), a_noisy.unsqueeze(1)], dim=1)
+            B, Kp2, A = cand.shape
+            s_rep = s.unsqueeze(1).expand(-1, Kp2, -1).reshape(-1, s.size(1))
+            a_rep = cand.reshape(-1, A)
+
+            q_rand1 = self.critic1(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
+            q_rand2 = self.critic2(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
+
+            min_q_rand = torch.min(q_rand1, q_rand2)
+            lse = torch.logsumexp(min_q_rand, dim=1).mean()
+
+            q_data = torch.min(self.critic1(s, a), self.critic2(s, a)).mean()
+            q_pi = torch.min(self.critic1(s, a_pi), self.critic2(s, a_pi)).mean()
+
+            cql_pen = (lse - 0.5 * (q_data + q_pi))
         else:
-            cql1 = cq1.new_zeros(())
-            cql2 = cq2.new_zeros(())
+            cql_pen = s.new_zeros(())
 
         if w is not None:
-            loss1 = (td1.pow(2) * w).mean() + cql_alpha * cql1
-            loss2 = (td2.pow(2) * w).mean() + cql_alpha * cql2
+            loss1 = (td1.pow(2) * w).mean() + cql_alpha * cql_pen
+            loss2 = (td2.pow(2) * w).mean() + cql_alpha * cql_pen
         else:
-            loss1 = F.smooth_l1_loss(cq1, y) + cql_alpha * cql1
-            loss2 = F.smooth_l1_loss(cq2, y) + cql_alpha * cql2
+            loss1 = F.smooth_l1_loss(cq1, y) + cql_alpha * cql_pen
+            loss2 = F.smooth_l1_loss(cq2, y) + cql_alpha * cql_pen
 
         self.critic1_optimizer.zero_grad(); loss1.backward()
         utils.clip_grad_norm_(self.critic1.parameters(), 1.0)
@@ -269,7 +274,7 @@ class DDPGAgent:
         # PER beta anneal before sampling
         if self.config["rl"].get("per_enabled", False) and hasattr(replay_buffer, "set_beta"):
             beta0 = float(self.config["rl"].get("per_beta", 0.6))
-            t = min(1.0, self.total_it / self.max_updates)
+            t = min(1.0, (self.total_it / self.max_updates) ** 0.5)
             replay_buffer.set_beta(beta0 + (1.0 - beta0) * t)
 
         if self.config["rl"].get("per_enabled", False):
@@ -302,110 +307,150 @@ class DDPGAgent:
         td1 = cq1 - y; td2 = cq2 - y
         
         # --- Conservative Q-Learning (small coefficient) ---
-        cql_alpha = float(self.config["rl"].get("cql_alpha", 1e-3))  # 1e-4..3e-3
+        cql_alpha = float(self.config["rl"].get("cql_alpha", 1e-3))
         if cql_alpha > 0.0:
             K = int(self.config["rl"].get("cql_num_samples", 10))
             lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
 
-            # Sample K random actions per state in the legal box → (B,K,A)
+            # Random K samples
             rand = torch.rand(s.size(0), K, a.size(1), device=s.device)
-            rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]        # LR in range
+            rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]
             mix = rand[..., 1:4].clamp(min=0.0)
-            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)           # project to simplex
+            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)
             rand[..., 1:4] = mix
-            rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)                      # usage in [0,1]
+            rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)
 
-            # Q(s, a_rand) → (B,K,1)
-            s_tile = s.unsqueeze(1).expand(-1, K, -1).reshape(-1, s.size(1))
-            rand_flat = rand.reshape(-1, a.size(1))
-            q_rand1 = self.critic1(s_tile, rand_flat).reshape(-1, K, 1).squeeze(-1)
-            q_rand2 = self.critic2(s_tile, rand_flat).reshape(-1, K, 1).squeeze(-1)
-
-            # Per-state logsumexp over K
-            lse1 = torch.logsumexp(q_rand1, dim=1).mean()
-            lse2 = torch.logsumexp(q_rand2, dim=1).mean()
-
-            # "Data/policy" term: encourage Q(s, a_data) & Q(s, π(s)) to be large
+            # Also include current policy action and a noisy variant
             with torch.no_grad():
                 a_pi = self.actor(s)
-                # clamp & re-normalize (same rules)
                 a_pi[:, 0:1] = a_pi[:, 0:1].clamp(lr_min, lr_max)
                 mix_pi = a_pi[:, 1:4].clamp(min=0.0)
                 a_pi[:, 1:4] = mix_pi / mix_pi.sum(dim=1, keepdim=True).clamp(min=1e-6)
                 a_pi[:, 4:5] = a_pi[:, 4:5].clamp(0.0, 1.0)
 
-            q_data1 = self.critic1(s, a).mean()
-            q_pi1   = self.critic1(s, a_pi).mean()
-            q_data2 = self.critic2(s, a).mean()
-            q_pi2   = self.critic2(s, a_pi).mean()
+                a_noisy = a_pi + (torch.randn_like(a_pi) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
+                a_noisy[:, 0:1] = a_noisy[:, 0:1].clamp(lr_min, lr_max)
+                m2 = a_noisy[:, 1:4].clamp(min=0.0)
+                a_noisy[:, 1:4] = m2 / m2.sum(dim=1, keepdim=True).clamp(min=1e-6)
+                a_noisy[:, 4:5] = a_noisy[:, 4:5].clamp(0.0, 1.0)
 
-            # Conservative penalty
-            cql1 = (lse1 - 0.5 * (q_data1 + q_pi1))
-            cql2 = (lse2 - 0.5 * (q_data2 + q_pi2))
+            cand = torch.cat([rand, a_pi.unsqueeze(1), a_noisy.unsqueeze(1)], dim=1)
+            B, Kp2, A = cand.shape
+            s_rep = s.unsqueeze(1).expand(-1, Kp2, -1).reshape(-1, s.size(1))
+            a_rep = cand.reshape(-1, A)
+
+            q_rand1 = self.critic1(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
+            q_rand2 = self.critic2(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
+
+            min_q_rand = torch.min(q_rand1, q_rand2)
+            lse = torch.logsumexp(min_q_rand, dim=1).mean()
+
+            q_data = torch.min(self.critic1(s, a), self.critic2(s, a)).mean()
+            q_pi = torch.min(self.critic1(s, a_pi), self.critic2(s, a_pi)).mean()
+
+            cql_pen = (lse - 0.5 * (q_data + q_pi))
         else:
-            cql1 = cq1.new_zeros(())
-            cql2 = cq2.new_zeros(())
+            cql_pen = s.new_zeros(())
 
         if w is not None:
-            loss1 = (td1.pow(2) * w).mean() + cql_alpha * cql1
-            loss2 = (td2.pow(2) * w).mean() + cql_alpha * cql2
+            loss1 = (td1.pow(2) * w).mean() + cql_alpha * cql_pen
+            loss2 = (td2.pow(2) * w).mean() + cql_alpha * cql_pen
         else:
-            loss1 = F.smooth_l1_loss(cq1, y) + cql_alpha * cql1
-            loss2 = F.smooth_l1_loss(cq2, y) + cql_alpha * cql2    
-            
+            loss1 = F.smooth_l1_loss(cq1, y) + cql_alpha * cql_pen
+            loss2 = F.smooth_l1_loss(cq2, y) + cql_alpha * cql_pen
+
 
         # Optimize critics
-        self.critic1_optimizer.zero_grad(); loss1.backward()
+        self.critic1_optimizer.zero_grad()
+        self.critic2_optimizer.zero_grad()
+        (loss1 + loss2).backward()
         utils.clip_grad_norm_(self.critic1.parameters(), 1.0)
-        self.critic1_optimizer.step(); self.critic1_scheduler.step()
-
-        self.critic2_optimizer.zero_grad(); loss2.backward()
         utils.clip_grad_norm_(self.critic2.parameters(), 1.0)
+        self.critic1_optimizer.step(); self.critic1_scheduler.step()
         self.critic2_optimizer.step(); self.critic2_scheduler.step()
 
         # Delayed actor + targets
+        a_data = a.detach()
         actor_loss = None
+        a_curr = None
         if self.total_it % self.policy_delay == 0:
             a_curr = self.actor(s)
-            q_term = -self.critic1(s, a_curr).mean()
+            q1_curr = self.critic1(s, a_curr)
+            q_term = -q1_curr.mean()
 
-            # (i) Entropy on the 3-way mixture (already added previously)
+            # (i) Entropy on the 3-way mixture
             mix = a_curr[:, 1:4].clamp(min=1e-8)
             mix_entropy = -(mix * mix.log()).sum(dim=1).mean()
-            ent_beta_mix = float(self.config["rl"].get("entropy_beta", 1e-3))  # 1e-3..3e-3
+            ent_beta_mix = float(self.config["rl"].get("entropy_beta", 1e-3))
 
-            # (ii) Entropy on the scalar usage (Bernoulli entropy)
+            # (ii) Bernoulli entropy on usage
             usage = a_curr[:, 4:5].clamp(1e-6, 1 - 1e-6)
             usage_entropy = -(usage * usage.log() + (1 - usage) * (1 - usage).log()).mean()
             ent_beta_usage = float(self.config["rl"].get("usage_entropy_beta", 1e-3))
 
-            # (iii) Soften LR extremes with a small quadratic around the mid-point of its range
+            # (iii) LR center penalty
             lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
             lr_center = 0.5 * (lr_min + lr_max)
-            lr_span   = max(1e-12, (lr_max - lr_min))
+            lr_span = max(1e-12, (lr_max - lr_min))
             lr = a_curr[:, 0:1]
             lr_pen = ((lr - lr_center) / lr_span).pow(2).mean()
-            lr_lambda = float(self.config["rl"].get("lr_center_penalty", 1e-3))  # 1e-3..5e-3
+            lr_lambda = float(self.config["rl"].get("lr_center_penalty", 1e-3))
 
-            # Optional nudge to keep usage near a target (default off)
-            usage_tgt  = float(self.config["rl"].get("target_usage", 0.5))
-            usage_lmbd = float(self.config["rl"].get("usage_penalty", 0.0))      # 0.0 = disabled
-            usage_pen  = ((usage - usage_tgt) ** 2).mean()
+            # (iv) Optional usage target penalty
+            usage_tgt = float(self.config["rl"].get("target_usage", 0.5))
+            usage_lmbd = float(self.config["rl"].get("usage_penalty", 0.0))
+            usage_pen = ((usage - usage_tgt) ** 2).mean()
+
+            # --- TD3+BC term (disabled if lambda=0) ---
+            td3bc_term = 0.0
+            if self.td3bc_lambda > 0.0:
+                if self.td3bc_qfilter:
+                    with torch.no_grad():
+                        q_data = self.critic1(s, a_data)
+                        mask = (q_data >= q1_curr).float()
+                        if mask.mean() < 1e-3:
+                            mask = torch.ones_like(mask)
+                    td3bc_term = ((a_curr - a_data).pow(2).mean(dim=1) * mask.squeeze(-1)).mean()
+                else:
+                    td3bc_term = (a_curr - a_data).pow(2).mean()
 
             actor_loss = (
                 q_term
-                - ent_beta_mix   * mix_entropy
+                - ent_beta_mix * mix_entropy
                 - ent_beta_usage * usage_entropy
-                + lr_lambda      * lr_pen
-                + usage_lmbd     * usage_pen
+                + lr_lambda * lr_pen
+                + usage_lmbd * usage_pen
+                + float(self.td3bc_lambda) * td3bc_term
             )
 
-            self.actor_optimizer.zero_grad(); actor_loss.backward()
+            # Optional action MMD regularization
+            mmd_lambda = float(self.config["rl"].get("mmd_lambda", 0.0))
+            if mmd_lambda > 0.0:
+                sigma = float(self.config["rl"].get("mmd_sigma", 0.2))
+
+                def rbf(x, y):
+                    x2 = (x ** 2).sum(dim=1, keepdim=True)
+                    y2 = (y ** 2).sum(dim=1, keepdim=True).t()
+                    xy = x @ y.t()
+                    d2 = x2 + y2 - 2 * xy
+                    return torch.exp(-d2 / (2 * sigma ** 2))
+
+                Kpp = rbf(a_curr, a_curr).mean()
+                Kqq = rbf(a_data, a_data).mean()
+                Kpq = rbf(a_curr, a_data).mean()
+                mmd = Kpp + Kqq - 2 * Kpq
+                actor_loss = actor_loss + mmd_lambda * mmd
+
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
             utils.clip_grad_norm_(self.actor.parameters(), 1.0)
             self.actor_optimizer.step()
             self._soft_update(self.actor_target, self.actor)
             self._soft_update(self.critic1_target, self.critic1)
             self._soft_update(self.critic2_target, self.critic2)
+        else:
+            with torch.no_grad():
+                a_curr = self.actor(s)
 
         self.actor_scheduler.step()
 
@@ -416,8 +461,12 @@ class DDPGAgent:
             new_prios = new_prios.flatten().cpu() + eps
             replay_buffer.update_priorities(idxs, new_prios)
 
+        # OOD metric: L2 distance to batch data action (proxy)
+        ood_l2 = (a_curr.detach() - a_data).pow(2).sum(dim=1).sqrt().mean().item()
+
         return {
-            "actor_loss":  actor_loss.item() if actor_loss is not None else None,
+            "actor_loss": actor_loss.item() if actor_loss is not None else None,
             "critic1_loss": loss1.item(),
             "critic2_loss": loss2.item(),
+            "ood_l2": ood_l2,
         }

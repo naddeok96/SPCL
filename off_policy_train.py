@@ -18,7 +18,11 @@ import wandb
 
 from rl_agent import DDPGAgent
 from curriculum_env import CurriculumEnv
-from replay_buffer import build_replay_buffer_streaming 
+from replay_buffer import (
+    build_replay_buffer_streaming,
+    load_replay_buffer,
+    save_replay_buffer,
+)
 from utils import select_top_percent, behavior_clone
 
 
@@ -33,6 +37,20 @@ def set_seed(seed: int):
 def load_config(config_file):
     with open(config_file, 'r') as f:
         return yaml.safe_load(f)
+
+
+def rollout_ga_candidate(env, candidate_vec, num_phases):
+    unit = candidate_vec.numel() // num_phases
+    obs = env.reset()
+    done = False
+    total_r = 0.0
+    for p in range(num_phases):
+        action = candidate_vec[p * unit:(p + 1) * unit]
+        obs, r, done = env.step(action)
+        total_r += float(r)
+        if done:
+            break
+    return total_r
 
 
 # ----- plotting helpers (unchanged) -----
@@ -152,7 +170,7 @@ def main():
 
     set_seed(config.get("seed", 42))
 
-    results_dir = os.path.join("results", "off_policy_v4")
+    results_dir = os.path.join("results", "off_policy_v5")
     os.makedirs(results_dir, exist_ok=True)
 
     if wandb is not None:
@@ -217,17 +235,84 @@ def main():
 
     # --------- Build a CPU-resident PER buffer via streaming ingestion ----------
     shard_size = int(config["rl"].get("ingest_shard_size", 200_000))
-    
-    replay_buffer = build_replay_buffer_streaming(
-        dataset,
-        capacity=int(config["rl"]["buffer_size"]),          # you can lower this in YAML if RAM is tight
-        use_per=bool(config["rl"].get("per_enabled", True)),
-        per_alpha=float(config["rl"].get("per_alpha", 0.4)),
-        per_beta=float(config["rl"].get("per_beta", 0.6)),
-        per_epsilon=float(config["rl"].get("per_epsilon", 1e-6)),
-        per_type=str(config["rl"].get("per_type", "proportional")),
-        shard_size=shard_size,
-    )
+    cache_path = config.get("paths", {}).get("replay_cache_path")
+    use_cache = bool(cache_path)
+    replay_buffer = None
+
+    # Normalize cache path to repo-relative path if provided
+    if use_cache:
+        cache_path = os.path.expanduser(cache_path)
+        cache_path = os.path.abspath(cache_path)
+
+    per_enabled = bool(config["rl"].get("per_enabled", True))
+    per_alpha = float(config["rl"].get("per_alpha", 0.4))
+    per_beta = float(config["rl"].get("per_beta", 0.6))
+    per_epsilon = float(config["rl"].get("per_epsilon", 1e-6))
+    per_type = str(config["rl"].get("per_type", "proportional"))
+    buffer_capacity = int(config["rl"]["buffer_size"])
+
+    def _cache_matches(meta: dict, expected: dict) -> bool:
+        for key, value in expected.items():
+            if meta.get(key) != value:
+                return False
+        return True
+
+    dataset_mtime = None
+    try:
+        dataset_mtime = os.path.getmtime(dataset_path)
+    except (OSError, FileNotFoundError):
+        dataset_mtime = None
+
+    expected_meta = {
+        "dataset_path": os.path.abspath(dataset_path),
+        "dataset_mtime": dataset_mtime,
+        "dataset_length": int(len(states)),
+        "buffer_capacity": buffer_capacity,
+        "per_enabled": per_enabled,
+        "per_alpha": per_alpha,
+        "per_beta": per_beta,
+        "per_epsilon": per_epsilon,
+        "per_type": per_type,
+        "shard_size": shard_size,
+    }
+
+    if use_cache and os.path.exists(cache_path):
+        try:
+            cached_buffer, cached_meta = load_replay_buffer(cache_path)
+            if _cache_matches(cached_meta, expected_meta):
+                replay_buffer = cached_buffer
+                print(f"Loaded replay buffer cache from {cache_path}")
+            else:
+                print("Replay buffer cache metadata mismatch; rebuilding cache.")
+        except Exception as cache_err:
+            print(f"Failed to load replay buffer cache ({cache_err}); rebuilding.")
+
+    if replay_buffer is None:
+        replay_buffer = build_replay_buffer_streaming(
+            dataset,
+            capacity=buffer_capacity,          # you can lower this in YAML if RAM is tight
+            use_per=per_enabled,
+            per_alpha=per_alpha,
+            per_beta=per_beta,
+            per_epsilon=per_epsilon,
+            per_type=per_type,
+            shard_size=shard_size,
+            show_progress=True,
+            progress_desc="Initializing replay buffer",
+        )
+        if use_cache:
+            cache_dir = os.path.dirname(cache_path)
+            if cache_dir:
+                os.makedirs(cache_dir, exist_ok=True)
+            try:
+                save_replay_buffer(replay_buffer, cache_path, expected_meta)
+                print(f"Saved replay buffer cache to {cache_path}")
+            except Exception as cache_save_err:
+                print(f"Warning: failed to save replay buffer cache ({cache_save_err})")
+
+    if per_enabled and hasattr(replay_buffer, "set_beta"):
+        replay_buffer.set_beta(per_beta)
+
     print(f"Replay buffer initialized with {len(replay_buffer)} transitions (capacity {config['rl']['buffer_size']}).")
 
     # Probe states for action variance tracking (on agent device)
@@ -277,8 +362,12 @@ def main():
                         "actor_lr": actor_lrs[-1],
                         "critic1_lr": critic1_lrs[-1],
                         "critic2_lr": critic2_lrs[-1],
+                        "ood_l2": metrics.get("ood_l2", None),
                         "update": update,
                     })
+                else:
+                    if metrics.get("ood_l2") is not None:
+                        print(f"Update {update}: ood_l2={metrics['ood_l2']:.4f}")
 
         with torch.no_grad():
             pred_actions = agent.actor(variance_states_tensor).cpu()
@@ -327,6 +416,24 @@ def main():
             print(f"Checkpoint at update {update}/{num_updates} - Eval reward {mean_reward:.2f} ± {std_reward:.2f}")
             if wandb is not None:
                 wandb.log({"eval_mean_reward": mean_reward, "eval_std_reward": std_reward, "update": update})
+
+            # Optional: compare vs GA elites if provided
+            ga_paths = config.get("compare_models", {}).get("GA_Elites", None)
+            if ga_paths:
+                try:
+                    ga = torch.load(ga_paths, map_location="cpu")
+                    elites = ga.get("population")
+                    num_phases = int(config["curriculum"].get("max_phases", 3))
+                    scores = []
+                    for i in range(min(3, elites.size(0))):
+                        env_comp = CurriculumEnv(config)
+                        scores.append(rollout_ga_candidate(env_comp, elites[i], num_phases))
+                    ga_mean = float(np.mean(scores))
+                    if wandb is not None:
+                        wandb.log({"ga_elite_mean_reward": ga_mean, "update": update})
+                    print(f"GA elite mean reward (sample): {ga_mean:.2f}")
+                except Exception as e:
+                    print(f"GA compare skipped: {e}")
 
             eval_episode = first_episode
 

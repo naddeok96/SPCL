@@ -12,6 +12,7 @@ import random
 from typing import Dict, Iterable, Tuple
 
 import torch
+from tqdm import tqdm
 
 
 Transition = Tuple[torch.Tensor, torch.Tensor, float, torch.Tensor, bool]
@@ -168,6 +169,9 @@ def stream_into_buffer(
     data: Dict[str, torch.Tensor],
     shard_size: int = 200_000,
     shuffle: bool = True,
+    *,
+    show_progress: bool = False,
+    progress_desc: str | None = None,
 ):
     """
     Stream a big dataset dict into the buffer in shards to limit peak memory.
@@ -184,10 +188,20 @@ def stream_into_buffer(
     if shuffle:
         indices = indices[torch.randperm(n)]
 
-    for s0, s1 in _iter_shards(n, shard_size):
-        idx = indices[s0:s1]
-        for i in idx.tolist():
-            buffer.push(states[i], actions[i], float(rewards[i]), next_states[i], bool(dones[i]))
+    progress = None
+    if show_progress:
+        progress = tqdm(total=n, desc=progress_desc or "Replay Buffer", leave=False)
+
+    try:
+        for s0, s1 in _iter_shards(n, shard_size):
+            idx = indices[s0:s1]
+            for i in idx.tolist():
+                buffer.push(states[i], actions[i], float(rewards[i]), next_states[i], bool(dones[i]))
+            if progress is not None:
+                progress.update(int(idx.numel()))
+    finally:
+        if progress is not None:
+            progress.close()
 
 
 def build_replay_buffer_streaming(
@@ -199,6 +213,9 @@ def build_replay_buffer_streaming(
     per_epsilon: float = 1e-6,
     per_type: str = "proportional",
     shard_size: int = 200_000,
+    *,
+    show_progress: bool = False,
+    progress_desc: str | None = None,
 ) -> ReplayBuffer | PERBuffer:
     """
     Create a CPU buffer (PER or uniform) and stream *all* data into it in shards.
@@ -210,5 +227,28 @@ def build_replay_buffer_streaming(
     else:
         buffer = ReplayBuffer(capacity)
 
-    stream_into_buffer(buffer, data, shard_size=shard_size, shuffle=True)
+    stream_into_buffer(
+        buffer,
+        data,
+        shard_size=shard_size,
+        shuffle=True,
+        show_progress=show_progress,
+        progress_desc=progress_desc,
+    )
     return buffer
+
+
+def save_replay_buffer(buffer: ReplayBuffer | PERBuffer, path: str, metadata: Dict | None = None) -> None:
+    """Persist the replay buffer to disk along with optional metadata."""
+    payload = {
+        "buffer": buffer,
+        "metadata": metadata or {},
+        "buffer_class": buffer.__class__.__name__,
+    }
+    torch.save(payload, path)
+
+
+def load_replay_buffer(path: str) -> Tuple[ReplayBuffer | PERBuffer, Dict]:
+    """Load a replay buffer and associated metadata from disk."""
+    payload = torch.load(path, map_location="cpu")
+    return payload["buffer"], payload.get("metadata", {})
