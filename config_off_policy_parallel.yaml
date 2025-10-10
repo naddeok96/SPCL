@@ -100,9 +100,9 @@ observation:
   num_bins: 16
 
 paths:
-  save_path: "results/curriculum_rl"
+  save_path: "results/curriculum_rl_parallel"
   data_path: "./data"
-  pretrain_path: "results/curriculum_rl/evolutionary_dataset.pt"
+  pretrain_path: "/data/naddeok/spcl/merged_history.pt"
   off_policy_actor_model: "results/off_policy/off_policy_actor_model_final.pth"
   off_policy_critic1_model: "results/off_policy/off_policy_critic1_model_final.pth"
   off_policy_critic2_model: "results/off_policy/off_policy_critic2_model_final.pth"
