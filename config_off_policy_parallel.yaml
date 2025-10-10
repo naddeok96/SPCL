@@ -3,7 +3,7 @@ device: "cuda:0"
 
 multi_gpu:
   enabled: true
-  gpu_ids: [0, 1]   # override via CLI flag --gpus if needed
+  gpu_ids: [0, 1, 2, 3, 5]   # override via CLI flag --gpus if needed
 
 fractions:
   easy_lower: 0.34
