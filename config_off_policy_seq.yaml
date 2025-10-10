@@ -45,8 +45,10 @@ rl:
 
   actor_lr:  0.0003
   critic_lr: 0.001
+  lr_scheduler: "cosine"
   lr_decay_steps: 200000
   lr_decay_rate: 0.5
+  lr_min_lr: 1.0e-5
 
   gamma: 0.995
   tau:   0.001
@@ -120,7 +122,6 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
-
 
 
 

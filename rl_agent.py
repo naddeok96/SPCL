@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn.utils as utils
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 
 class Actor(nn.Module):
@@ -91,11 +91,20 @@ class DDPGAgent:
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=config["rl"]["critic_lr"])
         self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=config["rl"]["critic_lr"])
 
-        step  = config["rl"].get("lr_decay_steps", 200000)
-        gamma = config["rl"].get("lr_decay_rate", 0.5)
-        self.actor_scheduler   = StepLR(self.actor_optimizer,   step_size=step, gamma=gamma)
-        self.critic1_scheduler = StepLR(self.critic1_optimizer, step_size=step, gamma=gamma)
-        self.critic2_scheduler = StepLR(self.critic2_optimizer, step_size=step, gamma=gamma)
+        sched_cfg = config["rl"]
+        sched_type = str(sched_cfg.get("lr_scheduler", "step")).lower()
+        decay_steps = max(1, int(sched_cfg.get("lr_decay_steps", 200000)))
+        gamma = float(sched_cfg.get("lr_decay_rate", 0.5))
+        eta_min = float(sched_cfg.get("lr_min_lr", 0.0))
+
+        def _make_scheduler(optimizer):
+            if sched_type == "cosine":
+                return CosineAnnealingLR(optimizer, T_max=decay_steps, eta_min=eta_min)
+            return StepLR(optimizer, step_size=decay_steps, gamma=gamma)
+
+        self.actor_scheduler   = _make_scheduler(self.actor_optimizer)
+        self.critic1_scheduler = _make_scheduler(self.critic1_optimizer)
+        self.critic2_scheduler = _make_scheduler(self.critic2_optimizer)
 
         self.ou_noise = OUNoise(action_dim, device=self.device)
         self.total_it = 0
