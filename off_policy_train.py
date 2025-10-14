@@ -16,7 +16,7 @@ import time
 
 import wandb
 
-from rl_agent import DDPGAgent
+from rl_agent import DDPGAgent, _project_mixture
 from curriculum_env import CurriculumEnv
 from replay_buffer import (
     build_replay_buffer_streaming,
@@ -170,7 +170,7 @@ def main():
 
     set_seed(config.get("seed", 42))
 
-    results_dir = os.path.join("results", "off_policy_v5")
+    results_dir = os.path.join("results", "off_policy_v6")
     os.makedirs(results_dir, exist_ok=True)
 
     if wandb is not None:
@@ -202,6 +202,18 @@ def main():
         dones_f = dones.to(torch.float32)
         rewards = rewards.clone()
         rewards = torch.where(dones_f > 0.5, rewards / 10.0, torch.zeros_like(rewards))
+
+    # Project offline dataset actions onto the updated manifold so critics see reachable actions.
+    with torch.no_grad():
+        projected_actions = actions.clone()
+        lr_min, lr_max = config["curriculum"]["learning_rate_range"]
+        projected_actions[:, 0:1] = projected_actions[:, 0:1].clamp(lr_min, lr_max)
+        projected_actions[:, 1:4] = _project_mixture(
+            projected_actions[:, 1:4].clamp(min=0.0),
+            eps=float(config["rl"].get("mix_floor", 0.05)),
+        )
+        projected_actions[:, 4:5] = projected_actions[:, 4:5].clamp(0.0, 1.0)
+        actions = projected_actions
     
     dataset = {"states": states, "actions": actions, "rewards": rewards, "next_states": next_states, "dones": dones}
     print(f"Loaded dataset from {dataset_path} with {len(states)} transitions")
@@ -414,8 +426,16 @@ def main():
             std_reward  = float(np.std(rewards_this_ckpt))
             reward_progress.append(mean_reward); reward_stds.append(std_reward); eval_updates.append(update)
             print(f"Checkpoint at update {update}/{num_updates} - Eval reward {mean_reward:.2f} ± {std_reward:.2f}")
+            with torch.no_grad():
+                a_eval = agent.actor(variance_states_tensor).cpu()
+                mix = a_eval[:, 1:4].clamp(min=1e-8)
+                mix_H = (-(mix * mix.log()).sum(dim=1)).mean().item()
+                mix_min = mix.min().item()
+                mix_max = mix.max().item()
+                usage_mean = a_eval[:, 4].mean().item()
             if wandb is not None:
                 wandb.log({"eval_mean_reward": mean_reward, "eval_std_reward": std_reward, "update": update})
+                wandb.log({"mix_entropy": mix_H, "mix_min": mix_min, "mix_max": mix_max, "usage_mean": usage_mean})
 
             # Optional: compare vs GA elites if provided
             ga_paths = config.get("compare_models", {}).get("GA_Elites", None)

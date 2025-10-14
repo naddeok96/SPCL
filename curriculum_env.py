@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Subset, ConcatDataset
 import torch.nn as nn
 
 from curriculum import eval_loader, run_phase_training
+from rl_agent import _project_mixture
 
 
 def build_cnn_model(n_convs, conv_ch, n_fcs, fc_units, activation_cls, dropout_rate,
@@ -214,6 +215,10 @@ class CurriculumEnv:
     def step(self, action):
         a = action if torch.is_tensor(action) else torch.tensor(action, dtype=torch.float32, device=self.device)
         lr, mix, frac = float(a[0]), a[1:4], float(a[4])
+        mix = _project_mixture(
+            mix.clamp(min=0.0).unsqueeze(0),
+            eps=float(self.config["rl"].get("mix_floor", 0.05))
+        ).squeeze(0)
         num = int(max(0.0, min(1.0, frac)) * self.remaining_samples)
 
         hp = {

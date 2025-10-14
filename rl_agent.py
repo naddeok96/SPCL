@@ -9,6 +9,7 @@ DDPG Agent with twin critics. Updated PER handling:
 - Fix weights shape (use (B,1) once).
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,14 +18,28 @@ import torch.nn.utils as utils
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 
+def _project_mixture(mix, eps):
+    """
+    Project mixture logits to the simplex with an optional floor epsilon.
+    """
+    s = mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)
+    mix = mix / s
+    if eps > 0:
+        k = mix.size(-1)
+        mix = (1.0 - k * eps) * mix + eps
+    return mix
+
+
 class Actor(nn.Module):
-    def __init__(self, obs_dim, lr_range, action_dim=5):
+    def __init__(self, obs_dim, lr_range, action_dim=5, mix_temp=2.0, mix_floor=0.05):
         super().__init__()
         self.fc1 = nn.Linear(obs_dim, 256)
         self.fc2 = nn.Linear(256, 128)
         self.dropout = nn.Dropout(p=0.2)
         self.out = nn.Linear(128, action_dim)
         self.lr_range = lr_range
+        self.mix_temp = max(1e-6, float(mix_temp))
+        self.mix_floor = float(mix_floor)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -33,7 +48,9 @@ class Actor(nn.Module):
         raw = self.out(x)
         lr_min, lr_max = self.lr_range
         lr  = lr_min + (lr_max - lr_min) * torch.sigmoid(raw[:, 0:1])
-        mix = F.softmax(raw[:, 1:4], dim=-1)
+        logits = raw[:, 1:4] / self.mix_temp
+        mix = F.softmax(logits, dim=-1)
+        mix = _project_mixture(mix, self.mix_floor)
         usage = torch.sigmoid(raw[:, 4:5])
         return torch.cat([lr, mix, usage], dim=-1)
 
@@ -75,8 +92,12 @@ class DDPGAgent:
         self.device = torch.device(config["device"])
         self.config = config
 
-        self.actor        = Actor(obs_dim, config["curriculum"]["learning_rate_range"], action_dim).to(self.device)
-        self.actor_target = Actor(obs_dim, config["curriculum"]["learning_rate_range"], action_dim).to(self.device)
+        self.mix_temp = float(self.config["rl"].get("mix_temp", 2.0))
+        self.mix_floor = float(self.config["rl"].get("mix_floor", 0.05))
+
+        lr_range = config["curriculum"]["learning_rate_range"]
+        self.actor        = Actor(obs_dim, lr_range, action_dim, mix_temp=self.mix_temp, mix_floor=self.mix_floor).to(self.device)
+        self.actor_target = Actor(obs_dim, lr_range, action_dim, mix_temp=self.mix_temp, mix_floor=self.mix_floor).to(self.device)
         self.critic1        = Critic(obs_dim, action_dim).to(self.device)
         self.critic1_target = Critic(obs_dim, action_dim).to(self.device)
         self.critic2        = Critic(obs_dim, action_dim).to(self.device)
@@ -134,6 +155,15 @@ class DDPGAgent:
         for t, s in zip(tgt.parameters(), src.parameters()):
             t.data.copy_(t.data * (1 - self.tau) + s.data * self.tau)
 
+    def _project_action(self, a):
+        lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
+        a[:, 0:1] = a[:, 0:1].clamp(lr_min, lr_max)
+        mix = a[:, 1:4].clamp(min=0.0)
+        mix = _project_mixture(mix, eps=self.mix_floor)
+        a[:, 1:4] = mix
+        a[:, 4:5] = a[:, 4:5].clamp(0.0, 1.0)
+        return a
+
     def select_action(self, state, noise_enable=True):
         if torch.is_tensor(state):
             s = state.unsqueeze(0).to(self.device).float()
@@ -149,13 +179,7 @@ class DDPGAgent:
             a[1:4] += n[1:4]
             a[4:5] += n[4:5]
 
-        # Clip & renormalize
-        lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
-        a[0] = a[0].clamp(lr_min, lr_max)
-        mix = a[1:4].clamp(min=0.0)
-        ssum = mix.sum()
-        a[1:4] = mix / ssum if ssum > 0 else torch.ones(3, device=self.device) / 3
-        a[4] = a[4].clamp(0.0, 1.0)
+        a = self._project_action(a.unsqueeze(0)).squeeze(0)
         return a
 
     def _prepare_batch(self, batch):
@@ -190,16 +214,7 @@ class DDPGAgent:
             na = self.actor_target(ns)
             noise = (torch.randn_like(na) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
             na = na + noise
-            lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
-            na[:, 0:1] = na[:, 0:1].clamp(lr_min, lr_max)
-            na[:, 1:4] = na[:, 1:4].clamp(0.0, 1.0)
-            
-            # renormalize the 3-way mixture to the probability simplex
-            mix = na[:, 1:4].clamp(min=0.0)
-            sums = mix.sum(dim=1, keepdim=True).clamp(min=1e-6)
-            na[:, 1:4] = mix / sums
-            
-            na[:, 4:5] = na[:, 4:5].clamp(0.0, 1.0)
+            na = self._project_action(na)
             tq1 = self.critic1_target(ns, na)
             tq2 = self.critic2_target(ns, na)
             y   = r + self.gamma * (1 - d) * torch.min(tq1, tq2)
@@ -216,24 +231,17 @@ class DDPGAgent:
             # Random K samples
             rand = torch.rand(s.size(0), K, a.size(1), device=s.device)
             rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]
-            mix = rand[..., 1:4].clamp(min=0.0)
-            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)
-            rand[..., 1:4] = mix
+            rand_mix = _project_mixture(rand[..., 1:4].clamp(min=0.0), eps=self.mix_floor)
+            rand[..., 1:4] = rand_mix
             rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)
 
             # Also include current policy action and a noisy variant
             with torch.no_grad():
                 a_pi = self.actor(s)
-                a_pi[:, 0:1] = a_pi[:, 0:1].clamp(lr_min, lr_max)
-                mix_pi = a_pi[:, 1:4].clamp(min=0.0)
-                a_pi[:, 1:4] = mix_pi / mix_pi.sum(dim=1, keepdim=True).clamp(min=1e-6)
-                a_pi[:, 4:5] = a_pi[:, 4:5].clamp(0.0, 1.0)
+                a_pi = self._project_action(a_pi)
 
                 a_noisy = a_pi + (torch.randn_like(a_pi) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
-                a_noisy[:, 0:1] = a_noisy[:, 0:1].clamp(lr_min, lr_max)
-                m2 = a_noisy[:, 1:4].clamp(min=0.0)
-                a_noisy[:, 1:4] = m2 / m2.sum(dim=1, keepdim=True).clamp(min=1e-6)
-                a_noisy[:, 4:5] = a_noisy[:, 4:5].clamp(0.0, 1.0)
+                a_noisy = self._project_action(a_noisy)
 
             cand = torch.cat([rand, a_pi.unsqueeze(1), a_noisy.unsqueeze(1)], dim=1)
             B, Kp2, A = cand.shape
@@ -243,13 +251,15 @@ class DDPGAgent:
             q_rand1 = self.critic1(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
             q_rand2 = self.critic2(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
 
-            min_q_rand = torch.min(q_rand1, q_rand2)
-            lse = torch.logsumexp(min_q_rand, dim=1).mean()
+            min_q_rand = torch.min(q_rand1, q_rand2)  # [B, K+2]
+            lse = torch.logsumexp(min_q_rand, dim=1) - math.log(min_q_rand.size(1))
+            lse = lse.mean()
 
             q_data = torch.min(self.critic1(s, a), self.critic2(s, a)).mean()
             q_pi = torch.min(self.critic1(s, a_pi), self.critic2(s, a_pi)).mean()
+            gap = torch.relu(q_pi - q_data)
 
-            cql_pen = (lse - 0.5 * (q_data + q_pi))
+            cql_pen = (lse - q_data) + 0.25 * gap
         else:
             cql_pen = s.new_zeros(())
 
@@ -298,16 +308,7 @@ class DDPGAgent:
             na = self.actor_target(ns)
             noise = (torch.randn_like(na) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
             na = na + noise
-            lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
-            na[:, 0:1] = na[:, 0:1].clamp(lr_min, lr_max)
-            na[:, 1:4] = na[:, 1:4].clamp(0.0, 1.0)
-            
-            # renormalize the 3-way mixture to the probability simplex
-            mix = na[:, 1:4].clamp(min=0.0)
-            sums = mix.sum(dim=1, keepdim=True).clamp(min=1e-6)
-            na[:, 1:4] = mix / sums
-            
-            na[:, 4:5] = na[:, 4:5].clamp(0.0, 1.0)
+            na = self._project_action(na)
             tq1 = self.critic1_target(ns, na)
             tq2 = self.critic2_target(ns, na)
             y   = r + self.gamma * (1 - d) * torch.min(tq1, tq2)
@@ -324,24 +325,17 @@ class DDPGAgent:
             # Random K samples
             rand = torch.rand(s.size(0), K, a.size(1), device=s.device)
             rand[..., 0:1] = lr_min + (lr_max - lr_min) * rand[..., 0:1]
-            mix = rand[..., 1:4].clamp(min=0.0)
-            mix = mix / mix.sum(dim=-1, keepdim=True).clamp(min=1e-6)
-            rand[..., 1:4] = mix
+            rand_mix = _project_mixture(rand[..., 1:4].clamp(min=0.0), eps=self.mix_floor)
+            rand[..., 1:4] = rand_mix
             rand[..., 4:5] = rand[..., 4:5].clamp(0.0, 1.0)
 
             # Also include current policy action and a noisy variant
             with torch.no_grad():
                 a_pi = self.actor(s)
-                a_pi[:, 0:1] = a_pi[:, 0:1].clamp(lr_min, lr_max)
-                mix_pi = a_pi[:, 1:4].clamp(min=0.0)
-                a_pi[:, 1:4] = mix_pi / mix_pi.sum(dim=1, keepdim=True).clamp(min=1e-6)
-                a_pi[:, 4:5] = a_pi[:, 4:5].clamp(0.0, 1.0)
+                a_pi = self._project_action(a_pi)
 
                 a_noisy = a_pi + (torch.randn_like(a_pi) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
-                a_noisy[:, 0:1] = a_noisy[:, 0:1].clamp(lr_min, lr_max)
-                m2 = a_noisy[:, 1:4].clamp(min=0.0)
-                a_noisy[:, 1:4] = m2 / m2.sum(dim=1, keepdim=True).clamp(min=1e-6)
-                a_noisy[:, 4:5] = a_noisy[:, 4:5].clamp(0.0, 1.0)
+                a_noisy = self._project_action(a_noisy)
 
             cand = torch.cat([rand, a_pi.unsqueeze(1), a_noisy.unsqueeze(1)], dim=1)
             B, Kp2, A = cand.shape
@@ -351,13 +345,15 @@ class DDPGAgent:
             q_rand1 = self.critic1(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
             q_rand2 = self.critic2(s_rep, a_rep).reshape(B, Kp2, 1).squeeze(-1)
 
-            min_q_rand = torch.min(q_rand1, q_rand2)
-            lse = torch.logsumexp(min_q_rand, dim=1).mean()
+            min_q_rand = torch.min(q_rand1, q_rand2)  # [B, K+2]
+            lse = torch.logsumexp(min_q_rand, dim=1) - math.log(min_q_rand.size(1))
+            lse = lse.mean()
 
             q_data = torch.min(self.critic1(s, a), self.critic2(s, a)).mean()
             q_pi = torch.min(self.critic1(s, a_pi), self.critic2(s, a_pi)).mean()
+            gap = torch.relu(q_pi - q_data)
 
-            cql_pen = (lse - 0.5 * (q_data + q_pi))
+            cql_pen = (lse - q_data) + 0.25 * gap
         else:
             cql_pen = s.new_zeros(())
 
@@ -384,6 +380,7 @@ class DDPGAgent:
         a_curr = None
         if self.total_it % self.policy_delay == 0:
             a_curr = self.actor(s)
+            a_curr = self._project_action(a_curr)
             q1_curr = self.critic1(s, a_curr)
             q_term = -q1_curr.mean()
 
@@ -395,7 +392,7 @@ class DDPGAgent:
             # (ii) Bernoulli entropy on usage
             usage = a_curr[:, 4:5].clamp(1e-6, 1 - 1e-6)
             usage_entropy = -(usage * usage.log() + (1 - usage) * (1 - usage).log()).mean()
-            ent_beta_usage = float(self.config["rl"].get("usage_entropy_beta", 1e-3))
+            ent_beta_usage = float(self.config["rl"].get("usage_entropy_beta", 1e-2))
 
             # (iii) LR center penalty
             lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
@@ -407,7 +404,7 @@ class DDPGAgent:
 
             # (iv) Optional usage target penalty
             usage_tgt = float(self.config["rl"].get("target_usage", 0.5))
-            usage_lmbd = float(self.config["rl"].get("usage_penalty", 0.0))
+            usage_lmbd = float(self.config["rl"].get("usage_penalty", 5e-3))
             usage_pen = ((usage - usage_tgt) ** 2).mean()
 
             # --- TD3+BC term (disabled if lambda=0) ---
@@ -460,6 +457,7 @@ class DDPGAgent:
         else:
             with torch.no_grad():
                 a_curr = self.actor(s)
+                a_curr = self._project_action(a_curr)
 
         self.actor_scheduler.step()
 

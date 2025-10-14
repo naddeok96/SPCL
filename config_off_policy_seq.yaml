@@ -35,6 +35,8 @@ rl:
   policy_delay: 4
   policy_noise: 0.2
   noise_clip:   0.1
+  mix_temp: 2.0
+  mix_floor: 0.05
 
   on_policy_episodes:            10000
   on_policy_updates_per_episode: 1
@@ -81,14 +83,14 @@ rl:
   seed_replay_buffer: true
   buffer_size:         14136870
 
-  entropy_beta: 1.0e-3     # try 1e-3 to 3e-3
-  usage_entropy_beta: 1.0e-3     # encourage usage away from 0/1
+  entropy_beta: 2.0e-2    # try 1e-3 to 3e-3
+  usage_entropy_beta: 1.0e-2      # encourage usage away from 0/1
   lr_center_penalty:  1.0e-3     # discourage LR hugging the bounds
-  usage_penalty:      1e-3        
+  usage_penalty:      5.0e-3      
   target_usage:       0.5
-  td3bc_lambda: 2.5        # 0.0 disables TD3+BC; typical 1..10
-  td3bc_qfilter: true      # only apply BC where Q(data) >= Q(policy)
-  cql_alpha:          0.003         # try {0.001, 0.003, 0.01}
+  td3bc_lambda: 7.5        # 0.0 disables TD3+BC; typical 1..10
+  td3bc_qfilter: false     # only apply BC where Q(data) >= Q(policy)
+  cql_alpha:          0.005         # try {0.001, 0.003, 0.01}
   cql_num_samples: 10      # you already have this; keep 10-20
   mmd_lambda: 0.0
   mmd_sigma: 0.2
@@ -122,7 +124,6 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
-
 
 
 

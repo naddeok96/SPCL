@@ -35,6 +35,8 @@ rl:
   policy_delay: 2
   policy_noise: 0.2
   noise_clip:   0.5
+  mix_temp: 2.0
+  mix_floor: 0.05
 
   on_policy_episodes:            10000
   on_policy_updates_per_episode: 1
@@ -97,7 +99,6 @@ compare_models:
     critic2: "results/off_policy/off_policy_critic2_model_final.pth"
 
 seed: 42
-
 
 
 
