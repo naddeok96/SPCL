@@ -1,0 +1,127 @@
+# Compute device for training. Change to "cpu" if no GPU is available.
+device: "cuda:0"
+
+fractions:
+  easy_lower: 0.34       # easy fraction ∈ [0.34, 0.95]
+  easy_upper: 0.95
+  medium_lower: 0.03    # medium ≥ 0
+  hard_min: 0.02         # ensure hard ≥ 0.02
+
+# Define the model search space for dynamic architectures
+model_space:
+  n_convs_choices: [1]
+  conv_channels_choices: [8, 16]
+  n_fcs_choices: [1, 2]
+  fc_units_choices: [128, 256]
+  activations: ["ReLU"]
+  dropout_rates: [0.0, 0.2, 0.5]
+
+curriculum:
+  train_samples_max: 30000
+  learning_rate_range: [0.001, 0.01]
+  max_phases: 3
+  student_batch_size: 512
+
+rl:
+  ea_pop_size:      124
+  ea_generations:   124
+  ea_top_k:         3
+  ea_mutation_rate: 0.1
+
+  pretrain_bc_iters:       100000
+  pretrain_critic_iters:   100000
+  off_policy_updates:      100000000
+
+  policy_delay: 4
+  policy_noise: 0.2
+  noise_clip:   0.1
+  mix_temp: 2.0
+  mix_floor: 0.05
+
+  on_policy_episodes:            10000
+  on_policy_updates_per_episode: 1
+  batch_size:                    512
+  probe_from_ea:                 true
+  probe_batch_size:              128
+  num_parallel_students:         1000
+
+  actor_lr:  0.0003
+  critic_lr: 0.001
+  lr_scheduler: "cosine"
+  lr_decay_steps: 200000
+  lr_decay_rate: 0.5
+  lr_min_lr: 1.0e-5
+
+  gamma: 0.995
+  tau:   0.001
+
+  exploration_noise: 0.2
+  exploration_noise_decay_steps: 300000
+
+  per_enabled: true
+  per_type:    "proportional"
+  per_alpha:   0.4
+  per_beta:    0.6
+  per_epsilon: 1e-6
+
+  elite_fraction: 0.02
+  num_eval_episodes: 5
+  early_stop_patience: 10
+
+  use_behavioral_cloning:    true
+  bc_trajectory_selection:   "top_k"
+  bc_top_k:                  250
+  bc_top_percent:            0.5 # Top 0.5% 
+  bc_epochs: 5
+  bc_batch_size: 256
+  bc_reward_threshold:       0.5
+  bc_percentile:             0.75
+  use_triplet_loss:          true
+  triplet_margin:            0.2
+  pretrain_critic_offpolicy: true
+
+  seed_replay_buffer: true
+  buffer_size:         14136870
+
+  entropy_beta: 2.0e-2    # try 1e-3 to 3e-3
+  usage_entropy_beta: 1.0e-2      # encourage usage away from 0/1
+  lr_center_penalty:  1.0e-3     # discourage LR hugging the bounds
+  usage_penalty:      5.0e-3      
+  target_usage:       0.5
+  td3bc_lambda: 7.5        # 0.0 disables TD3+BC; typical 1..10
+  td3bc_qfilter: false     # only apply BC where Q(data) >= Q(policy)
+  cql_alpha:          0.005         # try {0.001, 0.003, 0.01}
+  cql_num_samples: 10      # you already have this; keep 10-20
+  mmd_lambda: 0.0
+  mmd_sigma: 0.2
+
+observation:
+  num_bins: 16
+
+paths:
+  save_path:                  "results/curriculum_rl"
+  data_path:                  "./data"
+  pretrain_path:              "/data/naddeok/spcl/merged_history.pt"
+  off_policy_actor_model:     "results/off_policy_dp/off_policy_actor_model_final.pth"
+  off_policy_critic1_model:   "results/off_policy_dp/off_policy_critic1_model_final.pth"
+  off_policy_critic2_model:   "results/off_policy_dp/off_policy_critic2_model_final.pth"
+
+  on_policy_dir:       "results/seq_on_policy"
+  on_policy_actor_model:    "results/seq_on_policy/seq_on_policy_actor_model_final.pth"
+  on_policy_critic1_model:  "results/seq_on_policy/seq_on_policy_critic1_model_final.pth"
+  on_policy_critic2_model:  "results/seq_on_policy/seq_on_policy_critic2_model_final.pth"
+  on_policy_parallel_dir: "results/on_policy_parallel"
+  replay_cache_path: null   # set to a filepath (e.g. "./cache/replay_buffer.pt") to enable replay caching
+
+compare_models:
+  Off Policy Start:
+    actor:   "results/off_policy/off_policy_actor_0.pth"
+    critic1: "results/off_policy/off_policy_critic1_0.pth"
+    critic2: "results/off_policy/off_policy_critic2_0.pth"
+  Off Policy End:
+    actor:   "results/off_policy/off_policy_actor_model_final.pth"
+    critic1: "results/off_policy/off_policy_critic1_model_final.pth"
+    critic2: "results/off_policy/off_policy_critic2_model_final.pth"
+
+seed: 42
+
