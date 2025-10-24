@@ -1,0 +1,1552 @@
+    self._wait(timeout=sigint_timeout)
+  File "/usr/lib/python3.10/subprocess.py", line 1953, in _wait
+    time.sleep(delay)
+KeyboardInterrupt:
+wandb: - 0.008 MB of 0.008 MB uploaded (0.000 MB deduped)
+wandb: Run history:
+wandb:       actor_loss █████████▇▇▇▇▆▆▆▅▅▅▅▄▄▄▄▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁
+wandb:         actor_lr ███████▄▄▄▄▄▄▄▃▃▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:     critic1_loss ▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▃▃▄▄▄▄▄▅▆▅▆▆▇▄▆▇▅▅▆▇█▆
+wandb:       critic1_lr ███████▄▄▄▄▄▄▄▃▃▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:     critic2_loss ▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▃▄▄▄▄▄▄▅▆▅▆▆▇▄▆▇▅▅▆▇█▆
+wandb:       critic2_lr ███████▄▄▄▄▄▄▄▃▃▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb: eval_mean_reward █▄▁
+wandb:  eval_std_reward ▁▁█
+wandb:           update ▁▁▁▂▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇███
+wandb:
+wandb: Run summary:
+wandb:       actor_loss -2203654.25
+wandb:         actor_lr 1e-05
+wandb:     critic1_loss 288449.40625
+wandb:       critic1_lr 3e-05
+wandb:     critic2_loss 285872.59375
+wandb:       critic2_lr 3e-05
+wandb: eval_mean_reward 79.53595
+wandb:  eval_std_reward 1.57735
+wandb:           update 1174240
+wandb:
+wandb: 🚀 View run olive-violet-7 at: https://wandb.ai/naddeok/off_policy_training/runs/ik973jpb
+wandb: ️⚡ View job at https://wandb.ai/naddeok/off_policy_training/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjY5NTE0NjMzNA==/version
+_details/v5
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20250827_164945-ik973jpb/logs
+
+(spcl) naddeok5@lambda01:~/SPCL$ cd /data/naddeok/spcl/^C
+(spcl) naddeok5@lambda01:~/SPCL$ ^C
+(spcl) naddeok5@lambda01:~/SPCL$ python3 combine_files.py
+Combined code saved to: all_in_one.py
+
+(spcl) naddeok5@lambda01:~/SPCL$ python3 off_policy_train.py -c config_off_policy_seq.yaml
+wandb: Currently logged in as: naddeok. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.22.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.15.12
+wandb: Run data is saved locally in /home/naddeok5/SPCL/wandb/run-20250921_213544-0y1m9kqx
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run elated-totem-8
+wandb: ⭐️ View project at https://wandb.ai/naddeok/off_policy_training
+wandb: 🚀 View run at https://wandb.ai/naddeok/off_policy_training/runs/0y1m9kqx
+Loaded dataset from /data/naddeok/spcl/merged_history.pt with 14136862 transitions
+Behavior cloning warm-start complete.
+Replay buffer initialized with 14136862 transitions (capacity 14136870).
+Starting off-policy training for 100000000 updates
+Off-policy Training:   0%|                                                                             | 0/100000000 [00
+:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 477, in <module>
+    main()
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 276, in main
+    metrics = agent.update(replay_buffer, int(config["rl"]["batch_size"]))
+  File "/home/naddeok5/SPCL/rl_agent.py", line 368, in update
+    self.critic2_optimizer.zero_grad(); loss2.backward()
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/torch/_tensor.py", line 492, in backward
+    torch.autograd.backward(
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/torch/autograd/__init__.py", line 251, in backward
+    Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+RuntimeError: Trying to backward through the graph a second time (or directly access saved tensors after they have alrea
+dy been freed). Saved intermediate values of the graph are freed when you call .backward() or autograd.grad(). Specify r
+etain_graph=True if you need to backward through the graph a second time or if you need to access saved tensors after ca
+lling backward.
+wandb: Waiting for W&B process to finish... (failed 1). Press Control-C to abort syncing.
+wandb: 🚀 View run elated-totem-8 at: https://wandb.ai/naddeok/off_policy_training/runs/0y1m9kqx
+wandb: ️⚡ View job at https://wandb.ai/naddeok/off_policy_training/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjY5NTE0NjMzNA==/version
+_details/v6
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20250921_213544-0y1m9kqx/logs
+(spcl) naddeok5@lambda01:~/SPCL$ git pull^C
+(spcl) naddeok5@lambda01:~/SPCL$ python3 off_policy_train.py -c config_off_policy_seq.yaml
+wandb: Currently logged in as: naddeok. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.22.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.15.12
+wandb: Run data is saved locally in /home/naddeok5/SPCL/wandb/run-20250921_224600-n02tknga
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run rose-bird-9
+wandb: ⭐️ View project at https://wandb.ai/naddeok/off_policy_training
+wandb: 🚀 View run at https://wandb.ai/naddeok/off_policy_training/runs/n02tknga
+Loaded dataset from /data/naddeok/spcl/merged_history.pt with 14136862 transitions
+Behavior cloning warm-start complete.
+Replay buffer initialized with 14136862 transitions (capacity 14136870).
+
+Starting off-policy training for 100000000 updates
+Off-policy Training:   0%|                                                                             | 0/100000000 [00
+:00<?, ?it/s]/home/naddeok5/envs/spcl/lib/python3.10/site-packages/torch/optim/lr_scheduler.py:136: UserWarning: Detecte
+d call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the oppos
+ite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the firs
+t value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-lear
+ning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+Phase Training:  97%|███████████████████████████████████████████████████████████████████  | 34/35 [00:10<00:00,  3.18it/
+s, loss=0.58]
+Phase Training:  93%|███████████████████████████████████████████████████████████████▏    | 13/14 [00:04<00:00,  3.00it/s
+, loss=0.595]
+Phase Training:  83%|██████████████████████████████████████████████████████████▎           | 5/6 [00:01<00:00,  2.65it/s
+, loss=0.686]
+Phase Training:  97%|██████████████████████████████████████████████████████████████████  | 33/34 [00:05<00:00,  6.23it/s
+, loss=0.336]
+Phase Training:  93%|████████████████████████████████████████████████████████████████▍    | 14/15 [00:02<00:00,  6.42it/
+s, loss=0.39]
+Phase Training:  86%|████████████████████████████████████████████████████████████          | 6/7 [00:01<00:00,  5.87it/s
+, loss=0.454]
+Phase Training:  97%|███████████████████████████████████████████████████████████████████  | 35/36 [00:12<00:00,  2.90it/
+s, loss=0.58]
+Phase Training:  93%|███████████████████████████████████████████████████████████████▏    | 13/14 [00:04<00:00,  2.79it/s
+, loss=0.643]
+Phase Training:  83%|██████████████████████████████████████████████████████████▎           | 5/6 [00:01<00:00,  2.63it/s
+, loss=0.598]
+Phase Training:  97%|██████████████████████████████████████████████████████████████████  | 33/34 [00:06<00:00,  5.35it/s
+, loss=0.226]
+Phase Training:  93%|███████████████████████████████████████████████████████████████▍    | 14/15 [00:02<00:00,  5.35it/s
+, loss=0.199]
+Phase Training:  86%|████████████████████████████████████████████████████████████          | 6/7 [00:01<00:00,  5.26it/s
+, loss=0.159]
+Phase Training:  97%|██████████████████████████████████████████████████████████████████  | 34/35 [00:08<00:00,  3.98it/s
+, loss=0.307]
+Phase Training:  93%|███████████████████████████████████████████████████████████████▍    | 14/15 [00:03<00:00,  4.16it/s
+, loss=0.306]
+Phase Training:  83%|██████████████████████████████████████████████████████████▎           | 5/6 [00:01<00:00,  3.44it/s
+, loss=0.418]
+Eval 0 Ep4:  67%|█████████████████████████████████████████████████████████▎                            | 2/3 [00:29<00:1
+4, 14.19s/itCheckpoint at update 0/100000000 - Eval reward 85.72 ± 1.41
+
+/home/naddeok5/SPCL/off_policy_train.py:160: UserWarning: Glyph 127881 (\N{PARTY POPPER}) missing from current font.
+  plt.savefig(fname); plt.close(fig)
+Saved detailed figure for eval_0 episode 0 to results/off_policy_v5/eval_0_episode_0_detailed.png
+Off-policy Training:   0%|                                                             | 9870/100000000 [25:08<3568:14:1
+5,  7.78it/s]Hourly checkpoint saved at update 9870
+Off-policy Training:   0%|                                                          | 39270/100000000 [1:25:08<3432:39:0
+8,  8.09it/s]Hourly checkpoint saved at update 39270
+Off-policy Training:   0%|                                                          | 68171/100000000 [2:25:08<3342:17:4
+7,  8.31it/s]Hourly checkpoint saved at update 68171
+Off-policy Training:   0%|                                                          | 97872/100000000 [3:25:08<3479:10:1
+9,  7.98it/s]Hourly checkpoint saved at update 97872
+Off-policy Training:   0%|                                                         | 127753/100000000 [4:25:08<3286:03:3
+0,  8.44it/s]Hourly checkpoint saved at update 127753
+Off-policy Training:   0%|                                                         | 157342/100000000 [5:25:08<3438:11:0
+8,  8.07it/s]Hourly checkpoint saved at update 157342
+Off-policy Training:   0%|                                                         | 186352/100000000 [6:25:08<3249:05:5
+5,  8.53it/s]Hourly checkpoint saved at update 186352
+Off-policy Training:   0%|                                                         | 215817/100000000 [7:25:08<3255:50:5
+6,  8.51it/s]Hourly checkpoint saved at update 215817
+Off-policy Training:   0%|▏                                                        | 245723/100000000 [8:25:08<3269:59:3
+5,  8.47it/s]Hourly checkpoint saved at update 245723
+Off-policy Training:   0%|▏                                                        | 275051/100000000 [9:25:08<3499:40:3
+8,  7.92it/s]Hourly checkpoint saved at update 275051
+Off-policy Training:   0%|▏                                                       | 304550/100000000 [10:25:08<3296:51:0
+6,  8.40it/s]Hourly checkpoint saved at update 304550
+Off-policy Training:   0%|▏                                                       | 333902/100000000 [11:25:08<3386:04:1
+1,  8.18it/s]Hourly checkpoint saved at update 333902
+Off-policy Training:   0%|▏                                                       | 363820/100000000 [12:25:08<3383:21:1
+1,  8.18it/s]Hourly checkpoint saved at update 363820
+Off-policy Training:   0%|▏                                                       | 393713/100000000 [13:25:08<3314:19:0
+1,  8.35it/s]Hourly checkpoint saved at update 393713
+Off-policy Training:   0%|▏                                                       | 423415/100000000 [14:25:09<3274:31:0
+4,  8.45it/s]Hourly checkpoint saved at update 423415
+Off-policy Training:   0%|▎                                                       | 453314/100000000 [15:25:09<3242:54:4
+2,  8.53it/s]Hourly checkpoint saved at update 453314
+Off-policy Training:   0%|▎                                                       | 482813/100000000 [16:25:09<3454:54:2
+6,  8.00it/s]Hourly checkpoint saved at update 482813
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:31<00:00,  1.84it/s
+, loss=0.536]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.41it/s
+, loss=0.395]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:36<00:00,  1.61it/s
+, loss=0.401]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.376]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.398]
+Eval 500000 Ep4:   0%|                                                                                         | 0/3 [00
+:00<?, ?it/sCheckpoint at update 500000/100000000 - Eval reward 88.12 ± 0.86
+
+Saved detailed figure for eval_500000 episode 500000 to results/off_policy_v5/eval_500000_episode_500000_detailed.png
+Off-policy Training:   1%|▎                                                       | 509569/100000000 [17:25:09<3450:24:1
+7,  8.01it/s]Hourly checkpoint saved at update 509569
+Off-policy Training:   1%|▎                                                       | 538357/100000000 [18:25:09<3293:44:2
+7,  8.39it/s]Hourly checkpoint saved at update 538357
+Off-policy Training:   1%|▎                                                       | 567762/100000000 [19:25:09<3410:15:4
+1,  8.10it/s]Hourly checkpoint saved at update 567762
+Off-policy Training:   1%|▎                                                       | 597355/100000000 [20:25:09<3404:26:4
+1,  8.11it/s]Hourly checkpoint saved at update 597355
+Off-policy Training:   1%|▎                                                       | 626601/100000000 [21:25:09<3320:25:0
+9,  8.31it/s]Hourly checkpoint saved at update 626601
+Off-policy Training:   1%|▎                                                       | 655741/100000000 [22:25:09<3310:46:0
+7,  8.34it/s]Hourly checkpoint saved at update 655741
+Off-policy Training:   1%|▍                                                       | 685824/100000000 [23:25:09<3347:32:1
+0,  8.24it/s]Hourly checkpoint saved at update 685824
+Off-policy Training:   1%|▍                                                       | 716039/100000000 [24:25:09<3212:16:2
+6,  8.59it/s]Hourly checkpoint saved at update 716039
+Off-policy Training:   1%|▍                                                       | 746356/100000000 [25:25:09<3275:47:5
+9,  8.42it/s]Hourly checkpoint saved at update 746356
+Off-policy Training:   1%|▍                                                       | 776787/100000000 [26:25:09<3169:02:0
+3,  8.70it/s]Hourly checkpoint saved at update 776787
+Off-policy Training:   1%|▍                                                       | 807333/100000000 [27:25:09<3195:12:5
+1,  8.62it/s]Hourly checkpoint saved at update 807333
+Off-policy Training:   1%|▍                                                       | 837856/100000000 [28:25:09<3418:51:5
+2,  8.06it/s]Hourly checkpoint saved at update 837856
+Off-policy Training:   1%|▍                                                       | 867766/100000000 [29:25:10<3248:03:5
+0,  8.48it/s]Hourly checkpoint saved at update 867766
+Off-policy Training:   1%|▌                                                       | 897779/100000000 [30:25:10<3217:18:3
+8,  8.56it/s]Hourly checkpoint saved at update 897779
+Off-policy Training:   1%|▌                                                       | 927789/100000000 [31:25:10<3249:16:2
+3,  8.47it/s]Hourly checkpoint saved at update 927789
+Off-policy Training:   1%|▌                                                       | 957520/100000000 [32:25:10<3289:53:2
+6,  8.36it/s]Hourly checkpoint saved at update 957520
+Off-policy Training:   1%|▌                                                       | 986571/100000000 [33:25:10<3302:50:4
+6,  8.33it/s]Hourly checkpoint saved at update 986571
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/
+s, loss=0.66]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:35<00:00,  1.65it/
+s, loss=0.71]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:36<00:00,  1.58it/s
+, loss=0.707]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.533]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:47<00:00,  1.22it/s
+, loss=0.885]
+Eval 1000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 1000000/100000000 - Eval reward 84.22 ± 1.84
+
+Saved detailed figure for eval_1000000 episode 1000000 to results/off_policy_v5/eval_1000000_episode_1000000_detailed.pn
+g
+Off-policy Training:   1%|▌                                                      | 1013395/100000000 [34:25:10<3308:49:5
+1,  8.31it/s]Hourly checkpoint saved at update 1013395
+Off-policy Training:   1%|▌                                                      | 1043298/100000000 [35:25:10<3370:27:1
+2,  8.16it/s]Hourly checkpoint saved at update 1043298
+Off-policy Training:   1%|▌                                                      | 1073579/100000000 [36:25:10<3182:42:5
+6,  8.63it/s]Hourly checkpoint saved at update 1073579
+Off-policy Training:   1%|▌                                                      | 1102517/100000000 [37:25:10<3240:30:0
+6,  8.48it/s]Hourly checkpoint saved at update 1102517
+Off-policy Training:   1%|▌                                                      | 1132072/100000000 [38:25:10<3371:04:4
+8,  8.15it/s]Hourly checkpoint saved at update 1132072
+Off-policy Training:   1%|▋                                                      | 1162036/100000000 [39:25:10<3269:28:1
+1,  8.40it/s]Hourly checkpoint saved at update 1162036
+Off-policy Training:   1%|▋                                                      | 1192262/100000000 [40:25:10<3190:20:3
+2,  8.60it/s]Hourly checkpoint saved at update 1192262
+Off-policy Training:   1%|▋                                                      | 1222623/100000000 [41:25:10<3215:18:3
+8,  8.53it/s]Hourly checkpoint saved at update 1222623
+Off-policy Training:   1%|▋                                                      | 1252969/100000000 [42:25:10<3331:04:5
+0,  8.23it/s]Hourly checkpoint saved at update 1252969
+Off-policy Training:   1%|▋                                                      | 1283355/100000000 [43:25:10<3397:18:3
+4,  8.07it/s]Hourly checkpoint saved at update 1283355
+Off-policy Training:   1%|▋                                                      | 1313865/100000000 [44:25:11<3268:26:0
+6,  8.39it/s]Hourly checkpoint saved at update 1313865
+Off-policy Training:   1%|▋                                                      | 1344316/100000000 [45:25:11<3369:31:4
+2,  8.13it/s]Hourly checkpoint saved at update 1344316
+Off-policy Training:   1%|▊                                                      | 1374750/100000000 [46:25:11<3169:29:4
+0,  8.64it/s]Hourly checkpoint saved at update 1374750
+Off-policy Training:   1%|▊                                                      | 1404674/100000000 [47:25:11<3328:37:4
+4,  8.23it/s]Hourly checkpoint saved at update 1404674
+Off-policy Training:   1%|▊                                                      | 1434546/100000000 [48:25:11<3280:34:0
+4,  8.35it/s]Hourly checkpoint saved at update 1434546
+Off-policy Training:   1%|▊                                                      | 1463964/100000000 [49:25:11<3508:31:2
+6,  7.80it/s]Hourly checkpoint saved at update 1463964
+Off-policy Training:   1%|▊                                                      | 1493644/100000000 [50:25:11<3300:21:0
+8,  8.29it/s]Hourly checkpoint saved at update 1493644
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/s
+, loss=0.366]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:34<00:00,  1.69it/s
+, loss=0.436]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:29<00:00,  1.97it/s
+, loss=0.712]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.71it/s
+, loss=0.771]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:37<00:00,  1.55it/s
+, loss=0.723]
+Eval 1500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 1500000/100000000 - Eval reward 86.03 ± 1.82
+
+Saved detailed figure for eval_1500000 episode 1500000 to results/off_policy_v5/eval_1500000_episode_1500000_detailed.pn
+g
+Off-policy Training:   2%|▊                                                      | 1520799/100000000 [51:25:11<3267:24:4
+8,  8.37it/s]Hourly checkpoint saved at update 1520799
+Off-policy Training:   2%|▊                                                      | 1550871/100000000 [52:25:11<3223:34:3
+4,  8.48it/s]Hourly checkpoint saved at update 1550871
+Off-policy Training:   2%|▊                                                      | 1580920/100000000 [53:25:11<3309:00:2
+1,  8.26it/s]Hourly checkpoint saved at update 1580920
+Off-policy Training:   2%|▉                                                      | 1610188/100000000 [54:25:11<3455:39:0
+9,  7.91it/s]Hourly checkpoint saved at update 1610188
+Off-policy Training:   2%|▉                                                      | 1639472/100000000 [55:25:11<3361:42:4
+9,  8.13it/s]Hourly checkpoint saved at update 1639472
+Off-policy Training:   2%|▉                                                      | 1669448/100000000 [56:25:11<3281:33:1
+9,  8.32it/s]Hourly checkpoint saved at update 1669448
+Off-policy Training:   2%|▉                                                      | 1699585/100000000 [57:25:11<3279:12:3
+5,  8.33it/s]Hourly checkpoint saved at update 1699585
+Off-policy Training:   2%|▉                                                      | 1730004/100000000 [58:25:11<3344:40:0
+0,  8.16it/s]Hourly checkpoint saved at update 1730004
+Off-policy Training:   2%|▉                                                      | 1759705/100000000 [59:25:12<3355:22:5
+6,  8.13it/s]Hourly checkpoint saved at update 1759705
+Off-policy Training:   2%|▉                                                      | 1788680/100000000 [60:25:12<3294:12:0
+6,  8.28it/s]Hourly checkpoint saved at update 1788680
+Off-policy Training:   2%|█                                                      | 1818297/100000000 [61:25:12<3312:39:5
+4,  8.23it/s]Hourly checkpoint saved at update 1818297
+Off-policy Training:   2%|█                                                      | 1848291/100000000 [62:25:12<3167:36:1
+8,  8.61it/s]Hourly checkpoint saved at update 1848291
+Off-policy Training:   2%|█                                                      | 1878200/100000000 [63:25:12<3253:32:5
+6,  8.38it/s]Hourly checkpoint saved at update 1878200
+Off-policy Training:   2%|█                                                      | 1908487/100000000 [64:25:12<3197:38:5
+7,  8.52it/s]Hourly checkpoint saved at update 1908487
+Off-policy Training:   2%|█                                                      | 1937881/100000000 [65:25:12<3379:28:5
+9,  8.06it/s]Hourly checkpoint saved at update 1937881
+Off-policy Training:   2%|█                                                      | 1966893/100000000 [66:25:12<3246:18:0
+5,  8.39it/s]Hourly checkpoint saved at update 1966893
+Off-policy Training:   2%|█                                                      | 1996843/100000000 [67:25:12<3333:33:5
+5,  8.17it/s]Hourly checkpoint saved at update 1996843
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.873]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/s
+, loss=0.558]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.553]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.78it/s
+, loss=0.467]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.382]
+Eval 2000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 2000000/100000000 - Eval reward 86.66 ± 2.15
+
+Saved detailed figure for eval_2000000 episode 2000000 to results/off_policy_v5/eval_2000000_episode_2000000_detailed.pn
+g
+Off-policy Training:   2%|█                                                      | 2023335/100000000 [68:25:12<3179:33:0
+0,  8.56it/s]Hourly checkpoint saved at update 2023335
+Off-policy Training:   2%|█▏                                                     | 2052121/100000000 [69:25:12<3496:26:5
+6,  7.78it/s]Hourly checkpoint saved at update 2052121
+Off-policy Training:   2%|█▏                                                     | 2081280/100000000 [70:25:12<3289:31:2
+8,  8.27it/s]Hourly checkpoint saved at update 2081280
+Off-policy Training:   2%|█▏                                                     | 2111215/100000000 [71:25:12<3215:14:0
+0,  8.46it/s]Hourly checkpoint saved at update 2111215
+Off-policy Training:   2%|█▏                                                     | 2141322/100000000 [72:25:13<3131:57:4
+1,  8.68it/s]Hourly checkpoint saved at update 2141322
+Off-policy Training:   2%|█▏                                                     | 2172047/100000000 [73:25:13<3130:07:5
+1,  8.68it/s]Hourly checkpoint saved at update 2172047
+Off-policy Training:   2%|█▏                                                     | 2202077/100000000 [74:25:13<3200:43:5
+5,  8.49it/s]Hourly checkpoint saved at update 2202077
+Off-policy Training:   2%|█▏                                                     | 2230996/100000000 [75:25:13<3535:44:2
+0,  7.68it/s]Hourly checkpoint saved at update 2230996
+Off-policy Training:   2%|█▏                                                     | 2260424/100000000 [76:25:13<3431:35:2
+8,  7.91it/s]Hourly checkpoint saved at update 2260424
+Off-policy Training:   2%|█▎                                                     | 2289655/100000000 [77:25:13<3207:23:4
+9,  8.46it/s]Hourly checkpoint saved at update 2289655
+Off-policy Training:   2%|█▎                                                     | 2318968/100000000 [78:25:13<3229:15:4
+7,  8.40it/s]Hourly checkpoint saved at update 2318968
+Off-policy Training:   2%|█▎                                                     | 2349012/100000000 [79:25:13<3285:04:3
+7,  8.26it/s]Hourly checkpoint saved at update 2349012
+Off-policy Training:   2%|█▎                                                     | 2378792/100000000 [80:25:13<3402:00:0
+4,  7.97it/s]Hourly checkpoint saved at update 2378792
+Off-policy Training:   2%|█▎                                                     | 2408708/100000000 [81:25:13<3174:07:3
+2,  8.54it/s]Hourly checkpoint saved at update 2408708
+Off-policy Training:   2%|█▎                                                     | 2439043/100000000 [82:25:13<3202:14:1
+9,  8.46it/s]Hourly checkpoint saved at update 2439043
+Off-policy Training:   2%|█▎                                                     | 2469395/100000000 [83:25:13<3151:41:5
+8,  8.60it/s]Hourly checkpoint saved at update 2469395
+Off-policy Training:   2%|█▎                                                     | 2499754/100000000 [84:25:13<3118:34:0
+4,  8.68it/s]Hourly checkpoint saved at update 2499754
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.38it/s
+, loss=0.437]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.437]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.491]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.473]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:30<00:00,  1.89it/s
+, loss=0.408]
+Eval 2500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 2500000/100000000 - Eval reward 87.55 ± 0.55
+
+Saved detailed figure for eval_2500000 episode 2500000 to results/off_policy_v5/eval_2500000_episode_2500000_detailed.pn
+g
+Off-policy Training:   3%|█▍                                                     | 2526712/100000000 [85:25:13<3256:50:1
+5,  8.31it/s]Hourly checkpoint saved at update 2526712
+Off-policy Training:   3%|█▍                                                     | 2556778/100000000 [86:25:14<3196:04:3
+0,  8.47it/s]Hourly checkpoint saved at update 2556778
+Off-policy Training:   3%|█▍                                                     | 2586588/100000000 [87:25:14<3337:32:1
+4,  8.11it/s]Hourly checkpoint saved at update 2586588
+Off-policy Training:   3%|█▍                                                     | 2616475/100000000 [88:25:14<3161:11:5
+3,  8.56it/s]Hourly checkpoint saved at update 2616475
+Off-policy Training:   3%|█▍                                                     | 2645942/100000000 [89:25:14<3430:47:4
+3,  7.88it/s]Hourly checkpoint saved at update 2645942
+Off-policy Training:   3%|█▍                                                     | 2675083/100000000 [90:25:14<3180:58:3
+7,  8.50it/s]Hourly checkpoint saved at update 2675083
+Off-policy Training:   3%|█▍                                                     | 2705065/100000000 [91:25:14<3200:38:5
+9,  8.44it/s]Hourly checkpoint saved at update 2705065
+Off-policy Training:   3%|█▌                                                     | 2735072/100000000 [92:25:14<3205:54:2
+4,  8.43it/s]Hourly checkpoint saved at update 2735072
+Off-policy Training:   3%|█▌                                                     | 2765231/100000000 [93:25:14<3201:48:2
+9,  8.44it/s]Hourly checkpoint saved at update 2765231
+Off-policy Training:   3%|█▌                                                     | 2795571/100000000 [94:25:14<3151:12:0
+9,  8.57it/s]Hourly checkpoint saved at update 2795571
+Off-policy Training:   3%|█▌                                                     | 2825329/100000000 [95:25:14<3210:30:2
+8,  8.41it/s]Hourly checkpoint saved at update 2825329
+Off-policy Training:   3%|█▌                                                     | 2854280/100000000 [96:25:14<3404:16:3
+2,  7.93it/s]Hourly checkpoint saved at update 2854280
+Off-policy Training:   3%|█▌                                                     | 2883311/100000000 [97:25:14<3282:09:4
+5,  8.22it/s]Hourly checkpoint saved at update 2883311
+Off-policy Training:   3%|█▌                                                     | 2912851/100000000 [98:25:14<3435:17:4
+4,  7.85it/s]Hourly checkpoint saved at update 2912851
+Off-policy Training:   3%|█▌                                                     | 2942910/100000000 [99:25:14<3151:15:4
+4,  8.56it/s]Hourly checkpoint saved at update 2942910
+Off-policy Training:   3%|█▌                                                    | 2972066/100000000 [100:25:15<3303:22:0
+7,  8.16it/s]Hourly checkpoint saved at update 2972066
+Phase Training:  98%|████████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.41it
+/s, loss=0.6]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:31<00:00,  1.86it/s
+, loss=0.506]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:39<00:00,  1.46it/s
+, loss=0.548]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.38it/s
+, loss=0.631]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.491]
+Eval 3000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 3000000/100000000 - Eval reward 86.88 ± 0.54
+
+Saved detailed figure for eval_3000000 episode 3000000 to results/off_policy_v5/eval_3000000_episode_3000000_detailed.pn
+g
+Off-policy Training:   3%|█▌                                                | 3000001/100000000 [101:27:38<3045526:40:38
+, 113.03s/it]Hourly checkpoint saved at update 3000001
+Off-policy Training:   3%|█▋                                                    | 3029870/100000000 [102:27:38<3233:26:0
+0,  8.33it/s]Hourly checkpoint saved at update 3029870
+Off-policy Training:   3%|█▋                                                    | 3059835/100000000 [103:27:38<3213:26:4
+2,  8.38it/s]Hourly checkpoint saved at update 3059835
+Off-policy Training:   3%|█▋                                                    | 3089772/100000000 [104:27:38<3240:34:0
+1,  8.31it/s]Hourly checkpoint saved at update 3089772
+Off-policy Training:   3%|█▋                                                    | 3119280/100000000 [105:27:38<3293:13:3
+0,  8.17it/s]Hourly checkpoint saved at update 3119280
+Off-policy Training:   3%|█▋                                                    | 3149200/100000000 [106:27:38<3201:45:3
+3,  8.40it/s]Hourly checkpoint saved at update 3149200
+Off-policy Training:   3%|█▋                                                    | 3179048/100000000 [107:27:38<3320:03:4
+4,  8.10it/s]Hourly checkpoint saved at update 3179048
+Off-policy Training:   3%|█▋                                                    | 3208912/100000000 [108:27:38<3203:10:5
+5,  8.39it/s]Hourly checkpoint saved at update 3208912
+Off-policy Training:   3%|█▋                                                    | 3238931/100000000 [109:27:39<3125:37:3
+4,  8.60it/s]Hourly checkpoint saved at update 3238931
+Off-policy Training:   3%|█▊                                                    | 3269179/100000000 [110:27:39<3145:59:3
+8,  8.54it/s]Hourly checkpoint saved at update 3269179
+Off-policy Training:   3%|█▊                                                    | 3299652/100000000 [111:27:39<3181:07:5
+1,  8.44it/s]Hourly checkpoint saved at update 3299652
+Off-policy Training:   3%|█▊                                                    | 3330036/100000000 [112:27:39<3176:21:0
+0,  8.45it/s]Hourly checkpoint saved at update 3330036
+Off-policy Training:   3%|█▊                                                    | 3359400/100000000 [113:27:39<3283:50:2
+7,  8.17it/s]Hourly checkpoint saved at update 3359400
+Off-policy Training:   3%|█▊                                                    | 3389369/100000000 [114:27:39<3250:04:2
+0,  8.26it/s]Hourly checkpoint saved at update 3389369
+Off-policy Training:   3%|█▊                                                    | 3419448/100000000 [115:27:39<3252:26:0
+4,  8.25it/s]Hourly checkpoint saved at update 3419448
+Off-policy Training:   3%|█▊                                                    | 3449752/100000000 [116:27:39<3154:09:5
+6,  8.50it/s]Hourly checkpoint saved at update 3449752
+Off-policy Training:   3%|█▉                                                    | 3479696/100000000 [117:27:39<3216:08:2
+7,  8.34it/s]Hourly checkpoint saved at update 3479696
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.33it/
+s, loss=1.04]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:28<00:00,  2.03it/s
+, loss=0.364]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:30<00:00,  1.90it/s
+, loss=0.701]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.518]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.544]
+Eval 3500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 3500000/100000000 - Eval reward 85.69 ± 2.36
+
+Saved detailed figure for eval_3500000 episode 3500000 to results/off_policy_v5/eval_3500000_episode_3500000_detailed.pn
+g
+Off-policy Training:   4%|█▉                                                    | 3505442/100000000 [118:27:39<3271:22:0
+8,  8.19it/s]Hourly checkpoint saved at update 3505442
+Off-policy Training:   4%|█▉                                                    | 3534509/100000000 [119:27:39<3151:12:3
+1,  8.50it/s]Hourly checkpoint saved at update 3534509
+Off-policy Training:   4%|█▉                                                    | 3564223/100000000 [120:27:39<3232:15:4
+3,  8.29it/s]Hourly checkpoint saved at update 3564223
+Off-policy Training:   4%|█▉                                                    | 3594145/100000000 [121:27:39<3164:17:4
+1,  8.46it/s]Hourly checkpoint saved at update 3594145
+Off-policy Training:   4%|█▉                                                    | 3624046/100000000 [122:27:39<3605:49:3
+1,  7.42it/s]Hourly checkpoint saved at update 3624046
+Off-policy Training:   4%|█▉                                                    | 3653898/100000000 [123:27:39<3150:04:5
+2,  8.50it/s]Hourly checkpoint saved at update 3653898
+Off-policy Training:   4%|█▉                                                    | 3683927/100000000 [124:27:40<3161:07:5
+4,  8.46it/s]Hourly checkpoint saved at update 3683927
+Off-policy Training:   4%|██                                                    | 3714085/100000000 [125:27:40<3169:19:2
+3,  8.44it/s]Hourly checkpoint saved at update 3714085
+Off-policy Training:   4%|██                                                    | 3743903/100000000 [126:27:40<3276:37:4
+9,  8.16it/s]Hourly checkpoint saved at update 3743903
+Off-policy Training:   4%|██                                                    | 3773634/100000000 [127:27:40<3184:02:4
+5,  8.39it/s]Hourly checkpoint saved at update 3773634
+Off-policy Training:   4%|██                                                    | 3803490/100000000 [128:27:40<3191:43:0
+4,  8.37it/s]Hourly checkpoint saved at update 3803490
+Off-policy Training:   4%|██                                                    | 3833491/100000000 [129:27:40<3161:05:3
+2,  8.45it/s]Hourly checkpoint saved at update 3833491
+Off-policy Training:   4%|██                                                    | 3863312/100000000 [130:27:40<3524:45:2
+5,  7.58it/s]Hourly checkpoint saved at update 3863312
+Off-policy Training:   4%|██                                                    | 3892225/100000000 [131:27:40<3350:19:4
+2,  7.97it/s]Hourly checkpoint saved at update 3892225
+Off-policy Training:   4%|██                                                    | 3920973/100000000 [132:27:40<3432:31:4
+1,  7.78it/s]Hourly checkpoint saved at update 3920973
+Off-policy Training:   4%|██▏                                                   | 3950727/100000000 [133:27:40<3153:21:0
+5,  8.46it/s]Hourly checkpoint saved at update 3950727
+Off-policy Training:   4%|██▏                                                   | 3980609/100000000 [134:27:40<3159:29:5
+1,  8.44it/s]Hourly checkpoint saved at update 3980609
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.785]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:27<00:00,  2.08it/s
+, loss=0.319]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.79it/s
+, loss=0.568]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.81it/s
+, loss=0.417]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.79it/s
+, loss=0.369]
+Eval 4000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 4000000/100000000 - Eval reward 87.88 ± 1.74
+
+Saved detailed figure for eval_4000000 episode 4000000 to results/off_policy_v5/eval_4000000_episode_4000000_detailed.pn
+g
+Off-policy Training:   4%|██▏                                                   | 4007555/100000000 [135:27:40<3067:36:4
+5,  8.69it/s]Hourly checkpoint saved at update 4007555
+Off-policy Training:   4%|██▏                                                   | 4037601/100000000 [136:27:40<3231:06:2
+2,  8.25it/s]Hourly checkpoint saved at update 4037601
+Off-policy Training:   4%|██▏                                                   | 4067710/100000000 [137:27:40<3122:36:3
+4,  8.53it/s]Hourly checkpoint saved at update 4067710
+Off-policy Training:   4%|██▏                                                   | 4097739/100000000 [138:27:40<3129:32:1
+1,  8.51it/s]Hourly checkpoint saved at update 4097739
+Off-policy Training:   4%|██▏                                                   | 4127891/100000000 [139:27:40<3173:04:5
+1,  8.39it/s]Hourly checkpoint saved at update 4127891
+Off-policy Training:   4%|██▏                                                   | 4157966/100000000 [140:27:40<3131:46:5
+3,  8.50it/s]Hourly checkpoint saved at update 4157966
+Off-policy Training:   4%|██▎                                                   | 4187390/100000000 [141:27:41<3265:10:1
+9,  8.15it/s]Hourly checkpoint saved at update 4187390
+Off-policy Training:   4%|██▎                                                   | 4216907/100000000 [142:27:41<3128:08:2
+9,  8.51it/s]Hourly checkpoint saved at update 4216907
+Off-policy Training:   4%|██▎                                                   | 4246896/100000000 [143:27:41<3180:07:3
+3,  8.36it/s]Hourly checkpoint saved at update 4246896
+Off-policy Training:   4%|██▎                                                   | 4276947/100000000 [144:27:41<3168:03:1
+7,  8.39it/s]Hourly checkpoint saved at update 4276947
+Off-policy Training:   4%|██▎                                                   | 4307218/100000000 [145:27:41<3159:44:3
+2,  8.41it/s]Hourly checkpoint saved at update 4307218
+Off-policy Training:   4%|██▎                                                   | 4337346/100000000 [146:27:41<3138:26:4
+4,  8.47it/s]Hourly checkpoint saved at update 4337346
+Off-policy Training:   4%|██▎                                                   | 4368139/100000000 [147:27:41<3052:32:3
+6,  8.70it/s]Hourly checkpoint saved at update 4368139
+Off-policy Training:   4%|██▎                                                   | 4397596/100000000 [148:27:41<3207:09:4
+8,  8.28it/s]Hourly checkpoint saved at update 4397596
+Off-policy Training:   4%|██▍                                                   | 4426890/100000000 [149:27:41<3285:35:1
+8,  8.08it/s]Hourly checkpoint saved at update 4426890
+Off-policy Training:   4%|██▍                                                   | 4456821/100000000 [150:27:41<3247:36:1
+9,  8.17it/s]Hourly checkpoint saved at update 4456821
+Off-policy Training:   4%|██▍                                                   | 4486048/100000000 [151:27:41<3270:04:0
+5,  8.11it/s]Hourly checkpoint saved at update 4486048
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.32it/s
+, loss=0.598]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.422]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:40<00:00,  1.42it/s
+, loss=0.544]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:28<00:00,  2.06it/
+s, loss=0.54]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:36<00:00,  1.61it/
+s, loss=0.42]
+Eval 4500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 4500000/100000000 - Eval reward 86.73 ± 1.09
+
+Saved detailed figure for eval_4500000 episode 4500000 to results/off_policy_v5/eval_4500000_episode_4500000_detailed.pn
+g
+Off-policy Training:   5%|██▍                                                   | 4511817/100000000 [152:27:41<3275:20:3
+3,  8.10it/s]Hourly checkpoint saved at update 4511817
+Off-policy Training:   5%|██▍                                                   | 4540322/100000000 [153:27:41<3264:48:0
+1,  8.12it/s]Hourly checkpoint saved at update 4540322
+Off-policy Training:   5%|██▍                                                   | 4568852/100000000 [154:27:41<3370:16:0
+3,  7.87it/s]Hourly checkpoint saved at update 4568852
+Off-policy Training:   5%|██▍                                                   | 4598316/100000000 [155:27:41<3346:07:4
+9,  7.92it/s]Hourly checkpoint saved at update 4598316
+Off-policy Training:   5%|██▍                                                   | 4627519/100000000 [156:27:41<3526:37:1
+8,  7.51it/s]Hourly checkpoint saved at update 4627519
+Off-policy Training:   5%|██▌                                                   | 4656781/100000000 [157:27:41<3146:52:5
+7,  8.42it/s]Hourly checkpoint saved at update 4656781
+Off-policy Training:   5%|██▌                                                   | 4686584/100000000 [158:27:41<3206:58:4
+2,  8.26it/s]Hourly checkpoint saved at update 4686584
+Off-policy Training:   5%|██▌                                                   | 4716495/100000000 [159:27:41<3112:40:5
+4,  8.50it/s]Hourly checkpoint saved at update 4716495
+Off-policy Training:   5%|██▌                                                   | 4746279/100000000 [160:27:42<3150:37:1
+3,  8.40it/s]Hourly checkpoint saved at update 4746279
+Off-policy Training:   5%|██▌                                                   | 4774932/100000000 [161:27:42<3499:38:0
+8,  7.56it/s]Hourly checkpoint saved at update 4774932
+Off-policy Training:   5%|██▌                                                   | 4804100/100000000 [162:27:42<3176:00:2
+6,  8.33it/s]Hourly checkpoint saved at update 4804100
+Off-policy Training:   5%|██▌                                                   | 4833984/100000000 [163:27:42<3203:15:3
+0,  8.25it/s]Hourly checkpoint saved at update 4833984
+Off-policy Training:   5%|██▋                                                   | 4863944/100000000 [164:27:42<3153:13:5
+6,  8.38it/s]Hourly checkpoint saved at update 4863944
+Off-policy Training:   5%|██▋                                                   | 4894073/100000000 [165:27:42<3121:05:3
+2,  8.46it/s]Hourly checkpoint saved at update 4894073
+Off-policy Training:   5%|██▋                                                   | 4924174/100000000 [166:27:42<3418:06:0
+6,  7.73it/s]Hourly checkpoint saved at update 4924174
+Off-policy Training:   5%|██▋                                                   | 4952895/100000000 [167:27:42<3147:03:3
+6,  8.39it/s]Hourly checkpoint saved at update 4952895
+Off-policy Training:   5%|██▋                                                   | 4982689/100000000 [168:27:42<3194:09:3
+0,  8.26it/s]Hourly checkpoint saved at update 4982689
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:38<00:00,  1.49it/s
+, loss=0.432]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/s
+, loss=0.402]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:30<00:00,  1.93it/s
+, loss=0.458]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:34<00:00,  1.70it/
+s, loss=0.54]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.344]
+Eval 5000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 5000000/100000000 - Eval reward 88.51 ± 0.52
+
+Saved detailed figure for eval_5000000 episode 5000000 to results/off_policy_v5/eval_5000000_episode_5000000_detailed.pn
+g
+Off-policy Training:   5%|██▋                                                   | 5009397/100000000 [169:27:42<3132:33:2
+4,  8.42it/s]Hourly checkpoint saved at update 5009397
+Off-policy Training:   5%|██▋                                                   | 5039316/100000000 [170:27:42<3166:02:1
+8,  8.33it/s]Hourly checkpoint saved at update 5039316
+Off-policy Training:   5%|██▋                                                   | 5069288/100000000 [171:27:42<3123:31:4
+3,  8.44it/s]Hourly checkpoint saved at update 5069288
+Off-policy Training:   5%|██▊                                                   | 5099479/100000000 [172:27:42<3095:40:5
+6,  8.52it/s]Hourly checkpoint saved at update 5099479
+Off-policy Training:   5%|██▊                                                   | 5129543/100000000 [173:27:43<3179:39:4
+3,  8.29it/s]Hourly checkpoint saved at update 5129543
+Off-policy Training:   5%|██▊                                                   | 5159661/100000000 [174:27:43<3082:06:3
+5,  8.55it/s]Hourly checkpoint saved at update 5159661
+Off-policy Training:   5%|██▊                                                   | 5190055/100000000 [175:27:43<3110:59:0
+1,  8.47it/s]Hourly checkpoint saved at update 5190055
+Off-policy Training:   5%|██▊                                                   | 5220420/100000000 [176:27:43<3117:00:2
+3,  8.45it/s]Hourly checkpoint saved at update 5220420
+Off-policy Training:   5%|██▊                                                   | 5250563/100000000 [177:27:43<3124:54:0
+2,  8.42it/s]Hourly checkpoint saved at update 5250563
+Off-policy Training:   5%|██▊                                                   | 5279671/100000000 [178:27:43<3174:27:2
+5,  8.29it/s]Hourly checkpoint saved at update 5279671
+Off-policy Training:   5%|██▊                                                   | 5308510/100000000 [179:27:43<3117:05:5
+4,  8.44it/s]Hourly checkpoint saved at update 5308510
+Off-policy Training:   5%|██▉                                                   | 5337398/100000000 [180:27:43<3315:27:5
+2,  7.93it/s]Hourly checkpoint saved at update 5337398
+Off-policy Training:   5%|██▉                                                   | 5366188/100000000 [181:27:43<3169:28:5
+1,  8.29it/s]Hourly checkpoint saved at update 5366188
+Off-policy Training:   5%|██▉                                                   | 5396022/100000000 [182:27:43<3164:36:3
+4,  8.30it/s]Hourly checkpoint saved at update 5396022
+Off-policy Training:   5%|██▉                                                   | 5425903/100000000 [183:27:43<3188:18:1
+7,  8.24it/s]Hourly checkpoint saved at update 5425903
+Off-policy Training:   5%|██▉                                                   | 5455950/100000000 [184:27:43<3352:56:2
+6,  7.83it/s]Hourly checkpoint saved at update 5455950
+Off-policy Training:   5%|██▉                                                   | 5485965/100000000 [185:27:43<3297:58:2
+3,  7.96it/s]Hourly checkpoint saved at update 5485965
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.742]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.499]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.76it/s
+, loss=0.525]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:27<00:00,  2.13it/s
+, loss=0.443]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:31<00:00,  1.85it/s
+, loss=0.518]
+Eval 5500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 5500000/100000000 - Eval reward 86.88 ± 0.37
+
+Saved detailed figure for eval_5500000 episode 5500000 to results/off_policy_v5/eval_5500000_episode_5500000_detailed.pn
+g
+Off-policy Training:   6%|██▉                                                   | 5512556/100000000 [186:27:43<3260:49:0
+8,  8.05it/s]Hourly checkpoint saved at update 5512556
+Off-policy Training:   6%|██▉                                                   | 5541756/100000000 [187:27:43<3189:15:5
+5,  8.23it/s]Hourly checkpoint saved at update 5541756
+Off-policy Training:   6%|███                                                   | 5571587/100000000 [188:27:44<3133:15:4
+7,  8.37it/s]Hourly checkpoint saved at update 5571587
+Off-policy Training:   6%|███                                                   | 5600609/100000000 [189:27:44<3389:13:5
+6,  7.74it/s]Hourly checkpoint saved at update 5600609
+Off-policy Training:   6%|███                                                   | 5629500/100000000 [190:27:44<3249:15:0
+0,  8.07it/s]Hourly checkpoint saved at update 5629500
+Off-policy Training:   6%|███                                                   | 5658003/100000000 [191:27:44<3515:42:3
+9,  7.45it/s]Hourly checkpoint saved at update 5658003
+Off-policy Training:   6%|███                                                   | 5686888/100000000 [192:27:44<3255:17:2
+8,  8.05it/s]Hourly checkpoint saved at update 5686888
+Off-policy Training:   6%|███                                                   | 5715758/100000000 [193:27:44<3158:35:4
+4,  8.29it/s]Hourly checkpoint saved at update 5715758
+Off-policy Training:   6%|███                                                   | 5745421/100000000 [194:27:44<3184:28:0
+6,  8.22it/s]Hourly checkpoint saved at update 5745421
+Off-policy Training:   6%|███                                                   | 5775284/100000000 [195:27:44<3130:03:5
+1,  8.36it/s]Hourly checkpoint saved at update 5775284
+Off-policy Training:   6%|███▏                                                  | 5805046/100000000 [196:27:44<3170:42:5
+1,  8.25it/s]Hourly checkpoint saved at update 5805046
+Off-policy Training:   6%|███▏                                                  | 5834577/100000000 [197:27:44<3118:36:5
+7,  8.39it/s]Hourly checkpoint saved at update 5834577
+Off-policy Training:   6%|███▏                                                  | 5864457/100000000 [198:27:44<3128:58:3
+6,  8.36it/s]Hourly checkpoint saved at update 5864457
+Off-policy Training:   6%|███▏                                                  | 5894360/100000000 [199:27:44<3116:38:3
+0,  8.39it/s]Hourly checkpoint saved at update 5894360
+Off-policy Training:   6%|███▏                                                  | 5924127/100000000 [200:27:44<3184:26:2
+9,  8.21it/s]Hourly checkpoint saved at update 5924127
+Off-policy Training:   6%|███▏                                                  | 5953922/100000000 [201:27:44<3099:29:2
+5,  8.43it/s]Hourly checkpoint saved at update 5953922
+Off-policy Training:   6%|███▏                                                  | 5983877/100000000 [202:27:45<3077:16:5
+3,  8.49it/s]Hourly checkpoint saved at update 5983877
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.456]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:29<00:00,  1.96it/s
+, loss=0.524]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.469]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.35it/s
+, loss=0.638]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.75it/s
+, loss=0.429]
+Eval 6000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 6000000/100000000 - Eval reward 87.71 ± 0.70
+
+Saved detailed figure for eval_6000000 episode 6000000 to results/off_policy_v5/eval_6000000_episode_6000000_detailed.pn
+g
+Off-policy Training:   6%|███▏                                                  | 6010437/100000000 [203:27:45<3111:44:3
+2,  8.39it/s]Hourly checkpoint saved at update 6010437
+Off-policy Training:   6%|███▎                                                  | 6039090/100000000 [204:27:45<3217:56:1
+1,  8.11it/s]Hourly checkpoint saved at update 6039090
+Off-policy Training:   6%|███▎                                                  | 6067928/100000000 [205:27:45<3173:32:3
+1,  8.22it/s]Hourly checkpoint saved at update 6067928
+Off-policy Training:   6%|███▎                                                  | 6097067/100000000 [206:27:45<3111:06:0
+2,  8.38it/s]Hourly checkpoint saved at update 6097067
+Off-policy Training:   6%|███▎                                                  | 6125949/100000000 [207:27:45<3224:29:4
+2,  8.09it/s]Hourly checkpoint saved at update 6125949
+Off-policy Training:   6%|███▎                                                  | 6155418/100000000 [208:27:45<3142:22:2
+3,  8.30it/s]Hourly checkpoint saved at update 6155418
+Off-policy Training:   6%|███▎                                                  | 6206887/100000000 [209:27:45<1478:11:0
+8, 17.63it/s]Hourly checkpoint saved at update 6206887
+Off-policy Training:   6%|███▍                                                  | 6271850/100000000 [210:27:45<1416:24:2
+5, 18.38it/s]Hourly checkpoint saved at update 6271850
+Off-policy Training:   6%|███▍                                                  | 6337152/100000000 [211:27:45<1453:01:3
+0, 17.91it/s]Hourly checkpoint saved at update 6337152
+Off-policy Training:   6%|███▍                                                  | 6400716/100000000 [212:27:45<1433:49:5
+1, 18.13it/s]Hourly checkpoint saved at update 6400716
+Off-policy Training:   6%|███▍                                                  | 6465583/100000000 [213:27:45<1515:14:2
+1, 17.15it/s]Hourly checkpoint saved at update 6465583
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.458]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/
+s, loss=1.04]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.959]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.411]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.298]
+Eval 6500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 6500000/100000000 - Eval reward 86.53 ± 3.73
+
+Saved detailed figure for eval_6500000 episode 6500000 to results/off_policy_v5/eval_6500000_episode_6500000_detailed.pn
+g
+Off-policy Training:   7%|███▌                                                  | 6521133/100000000 [214:27:45<1383:14:4
+5, 18.77it/s]Hourly checkpoint saved at update 6521133
+Off-policy Training:   7%|███▌                                                  | 6584308/100000000 [215:27:45<1596:47:3
+6, 16.25it/s]Hourly checkpoint saved at update 6584308
+Off-policy Training:   7%|███▌                                                  | 6646721/100000000 [216:27:45<1728:48:5
+9, 15.00it/s]Hourly checkpoint saved at update 6646722
+Off-policy Training:   7%|███▌                                                  | 6711586/100000000 [217:27:45<1458:22:5
+6, 17.77it/s]Hourly checkpoint saved at update 6711586
+Off-policy Training:   7%|███▋                                                  | 6774948/100000000 [218:27:45<1459:17:3
+2, 17.75it/s]Hourly checkpoint saved at update 6774948
+Off-policy Training:   7%|███▋                                                  | 6839223/100000000 [219:27:45<1388:16:4
+0, 18.64it/s]Hourly checkpoint saved at update 6839224
+Off-policy Training:   7%|███▋                                                  | 6903124/100000000 [220:27:45<1422:30:2
+8, 18.18it/s]Hourly checkpoint saved at update 6903125
+Off-policy Training:   7%|███▊                                                  | 6965799/100000000 [221:27:45<1422:35:4
+7, 18.17it/s]Hourly checkpoint saved at update 6965800
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.431]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.704]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.515]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.38it/s
+, loss=0.812]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/
+s, loss=0.62]
+Eval 7000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 7000000/100000000 - Eval reward 86.14 ± 0.99
+
+Saved detailed figure for eval_7000000 episode 7000000 to results/off_policy_v5/eval_7000000_episode_7000000_detailed.pn
+g
+Off-policy Training:   7%|███▊                                                  | 7012058/100000000 [222:27:45<2934:48:4
+7,  8.80it/s]Hourly checkpoint saved at update 7012058
+Off-policy Training:   7%|███▊                                                  | 7047887/100000000 [223:27:45<2945:04:2
+0,  8.77it/s]Hourly checkpoint saved at update 7047887
+Off-policy Training:   7%|███▊                                                  | 7082681/100000000 [224:27:45<2840:33:0
+4,  9.09it/s]Hourly checkpoint saved at update 7082681
+Off-policy Training:   7%|███▊                                                  | 7117969/100000000 [225:27:45<2820:57:3
+7,  9.15it/s]Hourly checkpoint saved at update 7117969
+Off-policy Training:   7%|███▊                                                  | 7153450/100000000 [226:27:46<2742:56:1
+3,  9.40it/s]Hourly checkpoint saved at update 7153450
+Off-policy Training:   7%|███▉                                                  | 7188459/100000000 [227:27:46<2017:41:4
+3, 12.78it/s]Hourly checkpoint saved at update 7188459
+Off-policy Training:   7%|███▉                                                  | 7223363/100000000 [228:27:46<2937:39:1
+9,  8.77it/s]Hourly checkpoint saved at update 7223363
+Off-policy Training:   7%|███▉                                                  | 7259006/100000000 [229:27:46<3010:52:3
+8,  8.56it/s]Hourly checkpoint saved at update 7259006
+Off-policy Training:   7%|███▉                                                  | 7293799/100000000 [230:27:46<2744:36:0
+1,  9.38it/s]Hourly checkpoint saved at update 7293799
+Off-policy Training:   7%|███▉                                                  | 7329571/100000000 [231:27:46<2786:22:3
+7,  9.24it/s]Hourly checkpoint saved at update 7329571
+Off-policy Training:   7%|███▉                                                  | 7364398/100000000 [232:27:46<2924:10:1
+6,  8.80it/s]Hourly checkpoint saved at update 7364398
+Off-policy Training:   7%|███▉                                                  | 7398931/100000000 [233:27:46<2687:17:2
+8,  9.57it/s]Hourly checkpoint saved at update 7398931
+Off-policy Training:   7%|████                                                  | 7432419/100000000 [234:27:46<2570:35:2
+5, 10.00it/s]Hourly checkpoint saved at update 7432420
+Off-policy Training:   7%|████                                                  | 7467287/100000000 [235:27:46<2901:32:2
+6,  8.86it/s]Hourly checkpoint saved at update 7467287
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.447]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/s
+, loss=0.697]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.931]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.374]
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.38it/
+s, loss=0.48]
+Eval 7500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 7500000/100000000 - Eval reward 86.30 ± 2.69
+
+Saved detailed figure for eval_7500000 episode 7500000 to results/off_policy_v5/eval_7500000_episode_7500000_detailed.pn
+g
+Off-policy Training:   8%|███▊                                              | 7500001/100000000 [236:30:25<3122551:16:23
+, 121.53s/it]Hourly checkpoint saved at update 7500001
+Off-policy Training:   8%|████                                                  | 7533489/100000000 [237:30:25<2059:51:0
+8, 12.47it/s]Hourly checkpoint saved at update 7533489
+Off-policy Training:   8%|████                                                  | 7569494/100000000 [238:30:25<2822:13:1
+9,  9.10it/s]Hourly checkpoint saved at update 7569494
+Off-policy Training:   8%|████                                                  | 7605953/100000000 [239:30:25<2989:23:2
+5,  8.59it/s]Hourly checkpoint saved at update 7605953
+Off-policy Training:   8%|████▏                                                 | 7642389/100000000 [240:30:25<2779:10:5
+2,  9.23it/s]Hourly checkpoint saved at update 7642389
+Off-policy Training:   8%|████▏                                                 | 7678347/100000000 [241:30:25<1875:43:3
+8, 13.67it/s]Hourly checkpoint saved at update 7678348
+Off-policy Training:   8%|████▏                                                 | 7714473/100000000 [242:30:25<2764:11:5
+6,  9.27it/s]Hourly checkpoint saved at update 7714473
+Off-policy Training:   8%|████▏                                                 | 7750709/100000000 [243:30:25<2701:34:5
+8,  9.49it/s]Hourly checkpoint saved at update 7750709
+Off-policy Training:   8%|████▏                                                 | 7787180/100000000 [244:30:25<2707:01:5
+7,  9.46it/s]Hourly checkpoint saved at update 7787181
+Off-policy Training:   8%|████▏                                                 | 7822852/100000000 [245:30:25<2694:49:4
+6,  9.50it/s]Hourly checkpoint saved at update 7822852
+Off-policy Training:   8%|████▏                                                 | 7858697/100000000 [246:30:25<2865:34:0
+8,  8.93it/s]Hourly checkpoint saved at update 7858697
+Off-policy Training:   8%|████▎                                                 | 7894987/100000000 [247:30:25<2652:50:3
+6,  9.64it/s]Hourly checkpoint saved at update 7894987
+Off-policy Training:   8%|████▎                                                 | 7930599/100000000 [248:30:25<1968:46:1
+4, 12.99it/s]Hourly checkpoint saved at update 7930600
+Off-policy Training:   8%|████▎                                                 | 7966367/100000000 [249:30:25<2969:04:2
+6,  8.61it/s]Hourly checkpoint saved at update 7966367
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:35<00:00,  1.65it/
+s, loss=0.44]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.73it/s
+, loss=0.546]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.71it/s
+, loss=0.502]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.38it/s
+, loss=0.455]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.571]
+Eval 8000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 8000000/100000000 - Eval reward 87.03 ± 1.21
+
+Saved detailed figure for eval_8000000 episode 8000000 to results/off_policy_v5/eval_8000000_episode_8000000_detailed.pn
+g
+Off-policy Training:   8%|████                                              | 8000001/100000000 [250:33:37<3152616:46:02
+, 123.36s/it]Hourly checkpoint saved at update 8000001
+Off-policy Training:   8%|████▎                                                 | 8035776/100000000 [251:33:37<2813:53:2
+1,  9.08it/s]Hourly checkpoint saved at update 8035776
+Off-policy Training:   8%|████▎                                                 | 8071620/100000000 [252:33:37<2854:10:0
+3,  8.95it/s]Hourly checkpoint saved at update 8071620
+Off-policy Training:   8%|████▍                                                 | 8107329/100000000 [253:33:37<2049:09:2
+9, 12.46it/s]Hourly checkpoint saved at update 8107330
+Off-policy Training:   8%|████▍                                                 | 8142901/100000000 [254:33:37<2721:48:4
+6,  9.37it/s]Hourly checkpoint saved at update 8142901
+Off-policy Training:   8%|████▍                                                 | 8179635/100000000 [255:33:38<2653:23:3
+4,  9.61it/s]Hourly checkpoint saved at update 8179635
+Off-policy Training:   8%|████▍                                                 | 8216026/100000000 [256:33:38<2672:16:3
+3,  9.54it/s]Hourly checkpoint saved at update 8216026
+Off-policy Training:   8%|████▍                                                 | 8250542/100000000 [257:33:38<2003:45:5
+4, 12.72it/s]Hourly checkpoint saved at update 8250543
+Off-policy Training:   8%|████▍                                                 | 8286439/100000000 [258:33:38<2747:21:0
+2,  9.27it/s]Hourly checkpoint saved at update 8286439
+Off-policy Training:   8%|████▍                                                 | 8322850/100000000 [259:33:38<2721:55:2
+0,  9.36it/s]Hourly checkpoint saved at update 8322850
+Off-policy Training:   8%|████▌                                                 | 8359434/100000000 [260:33:38<2602:41:4
+9,  9.78it/s]Hourly checkpoint saved at update 8359434
+Off-policy Training:   8%|████▌                                                 | 8395299/100000000 [261:33:38<2816:23:3
+4,  9.03it/s]Hourly checkpoint saved at update 8395299
+Off-policy Training:   8%|████▌                                                 | 8432138/100000000 [262:33:38<2495:10:5
+5, 10.19it/s]Hourly checkpoint saved at update 8432139
+Off-policy Training:   8%|████▌                                                 | 8468169/100000000 [263:33:38<2689:51:4
+0,  9.45it/s]Hourly checkpoint saved at update 8468169
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.77it/
+s, loss=0.28]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.765]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.787]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.40it/s
+, loss=0.696]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.74it/s
+, loss=0.347]
+Eval 8500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 8500000/100000000 - Eval reward 86.80 ± 2.45
+
+Saved detailed figure for eval_8500000 episode 8500000 to results/off_policy_v5/eval_8500000_episode_8500000_detailed.pn
+g
+Off-policy Training:   9%|████▎                                             | 8500001/100000000 [264:34:14<3142634:22:47
+, 123.64s/it]Hourly checkpoint saved at update 8500001
+Off-policy Training:   9%|████▌                                                 | 8536184/100000000 [265:34:14<2824:20:3
+9,  9.00it/s]Hourly checkpoint saved at update 8536184
+Off-policy Training:   9%|████▋                                                 | 8570858/100000000 [266:34:14<2274:39:0
+5, 11.17it/s]Hourly checkpoint saved at update 8570858
+Off-policy Training:   9%|████▋                                                 | 8604729/100000000 [267:34:14<2911:13:1
+9,  8.72it/s]Hourly checkpoint saved at update 8604729
+Off-policy Training:   9%|████▋                                                 | 8639271/100000000 [268:34:14<2642:09:0
+8,  9.61it/s]Hourly checkpoint saved at update 8639271
+Off-policy Training:   9%|████▋                                                 | 8673448/100000000 [269:34:14<2010:10:4
+4, 12.62it/s]Hourly checkpoint saved at update 8673449
+Off-policy Training:   9%|████▋                                                 | 8709730/100000000 [270:34:14<2900:45:4
+2,  8.74it/s]Hourly checkpoint saved at update 8709730
+Off-policy Training:   9%|████▋                                                 | 8744801/100000000 [271:34:14<2625:31:3
+3,  9.65it/s]Hourly checkpoint saved at update 8744801
+Off-policy Training:   9%|████▋                                                 | 8779473/100000000 [272:34:14<2024:48:5
+2, 12.51it/s]Hourly checkpoint saved at update 8779473
+Off-policy Training:   9%|████▊                                                 | 8815607/100000000 [273:34:14<2825:41:0
+5,  8.96it/s]Hourly checkpoint saved at update 8815607
+Off-policy Training:   9%|████▊                                                 | 8850967/100000000 [274:34:14<2718:06:5
+7,  9.31it/s]Hourly checkpoint saved at update 8850967
+Off-policy Training:   9%|████▊                                                 | 8884498/100000000 [275:34:14<2960:16:4
+8,  8.55it/s]Hourly checkpoint saved at update 8884498
+Off-policy Training:   9%|████▊                                                 | 8919448/100000000 [276:34:14<2842:42:3
+3,  8.90it/s]Hourly checkpoint saved at update 8919448
+Off-policy Training:   9%|████▊                                                 | 8954866/100000000 [277:34:15<2552:22:3
+7,  9.91it/s]Hourly checkpoint saved at update 8954866
+Off-policy Training:   9%|████▊                                                 | 8990280/100000000 [278:34:15<2818:27:3
+2,  8.97it/s]Hourly checkpoint saved at update 8990280
+Phase Training:  98%|███████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.72it/
+s, loss=0.41]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.77it/s
+, loss=0.431]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.38it/s
+, loss=0.607]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:34<00:00,  1.70it/s
+, loss=0.345]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.37it/s
+, loss=0.608]
+Eval 9000000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 9000000/100000000 - Eval reward 87.55 ± 1.96
+
+Saved detailed figure for eval_9000000 episode 9000000 to results/off_policy_v5/eval_9000000_episode_9000000_detailed.pn
+g
+Off-policy Training:   9%|████▊                                                 | 9022071/100000000 [279:34:15<1942:00:1
+2, 13.01it/s]Hourly checkpoint saved at update 9022072
+Off-policy Training:   9%|████▉                                                 | 9057228/100000000 [280:34:15<2813:07:4
+4,  8.98it/s]Hourly checkpoint saved at update 9057228
+Off-policy Training:   9%|████▉                                                 | 9091679/100000000 [281:34:15<2759:42:1
+3,  9.15it/s]Hourly checkpoint saved at update 9091679
+Off-policy Training:   9%|████▉                                                 | 9126052/100000000 [282:34:15<2820:36:3
+3,  8.95it/s]Hourly checkpoint saved at update 9126052
+Off-policy Training:   9%|████▉                                                 | 9161385/100000000 [283:34:15<2744:06:4
+5,  9.20it/s]Hourly checkpoint saved at update 9161385
+Off-policy Training:   9%|████▉                                                 | 9197067/100000000 [284:34:15<2680:17:3
+5,  9.41it/s]Hourly checkpoint saved at update 9197067
+Off-policy Training:   9%|████▉                                                 | 9231646/100000000 [285:34:15<2705:12:3
+1,  9.32it/s]Hourly checkpoint saved at update 9231646
+Off-policy Training:   9%|█████                                                 | 9265979/100000000 [286:34:15<3027:43:3
+3,  8.32it/s]Hourly checkpoint saved at update 9265979
+Off-policy Training:   9%|█████                                                 | 9299628/100000000 [287:34:15<1973:12:2
+2, 12.77it/s]Hourly checkpoint saved at update 9299628
+Off-policy Training:   9%|█████                                                 | 9333904/100000000 [288:34:15<2881:07:4
+8,  8.74it/s]Hourly checkpoint saved at update 9333904
+Off-policy Training:   9%|█████                                                 | 9369201/100000000 [289:34:15<2627:48:0
+3,  9.58it/s]Hourly checkpoint saved at update 9369201
+Off-policy Training:   9%|█████                                                 | 9404003/100000000 [290:34:15<2699:14:1
+9,  9.32it/s]Hourly checkpoint saved at update 9404003
+Off-policy Training:   9%|█████                                                 | 9439794/100000000 [291:34:15<2716:32:2
+4,  9.26it/s]Hourly checkpoint saved at update 9439794
+Off-policy Training:   9%|█████                                                 | 9475705/100000000 [292:34:15<2656:56:3
+5,  9.46it/s]Hourly checkpoint saved at update 9475705
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.504]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.35it/s
+, loss=0.437]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.608]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.41it/s
+, loss=0.617]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:41<00:00,  1.39it/s
+, loss=0.554]
+Eval 9500000 Ep4:   0%|                                                                                        | 0/3 [00
+:00<?, ?it/sCheckpoint at update 9500000/100000000 - Eval reward 86.95 ± 1.76
+
+Saved detailed figure for eval_9500000 episode 9500000 to results/off_policy_v5/eval_9500000_episode_9500000_detailed.pn
+g
+Off-policy Training:  10%|█████▏                                                | 9506097/100000000 [293:34:15<3177:41:5
+6,  7.91it/s]Hourly checkpoint saved at update 9506097
+Off-policy Training:  10%|█████▏                                                | 9534684/100000000 [294:34:15<3373:19:4
+2,  7.45it/s]Hourly checkpoint saved at update 9534684
+Off-policy Training:  10%|█████▏                                                | 9564278/100000000 [295:34:15<3046:28:0
+5,  8.25it/s]Hourly checkpoint saved at update 9564278
+Off-policy Training:  10%|█████▏                                                | 9594117/100000000 [296:34:15<2954:26:0
+7,  8.50it/s]Hourly checkpoint saved at update 9594117
+Off-policy Training:  10%|█████▏                                                | 9624033/100000000 [297:34:15<3099:42:0
+6,  8.10it/s]Hourly checkpoint saved at update 9624033
+Off-policy Training:  10%|█████▏                                                | 9653114/100000000 [298:34:16<3053:29:4
+3,  8.22it/s]Hourly checkpoint saved at update 9653114
+Off-policy Training:  10%|█████▏                                                | 9682693/100000000 [299:34:16<3001:03:4
+9,  8.36it/s]Hourly checkpoint saved at update 9682693
+Off-policy Training:  10%|█████▏                                                | 9711858/100000000 [300:34:16<3061:00:0
+2,  8.19it/s]Hourly checkpoint saved at update 9711858
+Off-policy Training:  10%|█████▎                                                | 9740315/100000000 [301:34:16<3265:22:5
+9,  7.68it/s]Hourly checkpoint saved at update 9740315
+Off-policy Training:  10%|█████▎                                                | 9769620/100000000 [302:34:16<3122:47:4
+0,  8.03it/s]Hourly checkpoint saved at update 9769620
+Off-policy Training:  10%|█████▎                                                | 9798907/100000000 [303:34:16<2959:01:5
+4,  8.47it/s]Hourly checkpoint saved at update 9798907
+Off-policy Training:  10%|█████▎                                                | 9828009/100000000 [304:34:16<3293:40:4
+0,  7.60it/s]Hourly checkpoint saved at update 9828009
+Off-policy Training:  10%|█████▎                                                | 9856383/100000000 [305:34:16<3005:55:1
+0,  8.33it/s]Hourly checkpoint saved at update 9856383
+Off-policy Training:  10%|█████▎                                                | 9885330/100000000 [306:34:16<3155:55:1
+8,  7.93it/s]Hourly checkpoint saved at update 9885330
+Off-policy Training:  10%|█████▎                                                | 9913868/100000000 [307:34:16<3123:41:1
+1,  8.01it/s]Hourly checkpoint saved at update 9913868
+Off-policy Training:  10%|█████▎                                                | 9943634/100000000 [308:34:16<2955:02:1
+7,  8.47it/s]Hourly checkpoint saved at update 9943634
+Off-policy Training:  10%|█████▍                                                | 9972888/100000000 [309:34:16<3261:19:3
+4,  7.67it/s]Hourly checkpoint saved at update 9972888
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:43<00:00,  1.34it/s
+, loss=0.317]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:30<00:00,  1.92it/s
+, loss=0.477]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:33<00:00,  1.73it/s
+, loss=0.679]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:32<00:00,  1.81it/s
+, loss=0.513]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.398]
+Eval 10000000 Ep4:   0%|                                                                                       | 0/3 [00
+:00<?, ?it/sCheckpoint at update 10000000/100000000 - Eval reward 88.27 ± 1.29
+
+Early stopping at update 10000000 due to no improvement
+Off-policy Training:  10%|█████▎                                               | 10000000/100000000 [310:35:55<2795:23:2
+0,  8.94it/s]
+Phase Training:  98%|██████████████████████████████████████████████████████████████████▊ | 58/59 [00:42<00:00,  1.36it/s
+, loss=0.497]
+Final evaluation episode total reward: 88.38993127439763
+
+Saved detailed figure for final_eval episode 10000000 to results/off_policy_v5/final_eval_episode_10000000_detailed.png
+Saved final actor → results/off_policy_v5/off_policy_actor_model_final.pth
+Saved final critic 1 → results/off_policy_v5/off_policy_critic1_model_final.pth
+Saved final critic 2 → results/off_policy_v5/off_policy_critic2_model_final.pth
+wandb: Waiting for W&B process to finish... (success).
+wandb:
+wandb: Run history:
+wandb:         actor_loss █▃▂▂▂▂▁▂▁▁▂▁▁▂▁▂▂▁▁▁▁▂▁▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▂▂
+wandb:           actor_lr █▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:       critic1_loss ▇▆█▄▆▄▇█▆▄▅▅▆▆▇█▆▅▅▆▆▇▆▆▅▇▆▄▅▅▃▁▅▅▇▃▄▄▄▆
+wandb:         critic1_lr █▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:       critic2_loss █▆█▄▆▄▇█▆▄▆▅▆▆▇█▆▅▅▆▆▆▆▆▅▇▆▄▅▅▃▁▅▅▇▃▄▃▄▆
+wandb:         critic2_lr █▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:   eval_mean_reward ▃▇▁▄▅▆▅▃▇▅█▅▇▅▄▄▆▅▆▅█
+wandb:    eval_std_reward ▃▂▄▄▅▁▁▅▄▂▁▁▂█▂▆▃▅▄▄▃
+wandb: final_total_reward ▁
+wandb:             ood_l2 █▆▁▄▂▁▄▁▃▄▃▂▁▂▂▂▃▃▄▂▃▃▂▃▃▄▄▃▂▅▃▄▄▃▄▃▅▄▂▁
+wandb:             update ▁▁▁▁▂▂▂▂▂▃▃▃▃▃▃▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇███
+wandb:
+wandb: Run summary:
+wandb:         actor_loss -86.82181
+wandb:           actor_lr 0.0
+wandb:       critic1_loss 31.0255
+wandb:         critic1_lr 0.0
+wandb:       critic2_loss 31.00665
+wandb:         critic2_lr 0.0
+wandb:   eval_mean_reward 88.26959
+wandb:    eval_std_reward 1.29243
+wandb: final_total_reward 88.38993
+wandb:             ood_l2 0.74919
+wandb:             update 10000000
+wandb:
+wandb: 🚀 View run rose-bird-9 at: https://wandb.ai/naddeok/off_policy_training/runs/n02tknga
+wandb: ️⚡ View job at https://wandb.ai/naddeok/off_policy_training/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjY5NTE0NjMzNA==/version
+_details/v7
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20250921_224600-n02tknga/logs
+(spcl) naddeok5@lambda01:~/SPCL$ python3 off_policy_train.py -c config_off_polic
+(spcl) naddeok5@lambda01:~/SPCL$ python3 off_policy_train.py -c config_off_policy_seq.yaml
+wandb: Currently logged in as: naddeok. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.22.2 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.15.12
+wandb: Run data is saved locally in /home/naddeok5/SPCL/wandb/run-20251010_105431-hsn0rwle
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run legendary-jazz-10
+wandb: ⭐️ View project at https://wandb.ai/naddeok/off_policy_training
+wandb: 🚀 View run at https://wandb.ai/naddeok/off_policy_training/runs/hsn0rwle
+Loaded dataset from /data/naddeok/spcl/merged_history.pt with 14136862 transitions
+Behavior cloning warm-start complete.
+Replay buffer initialized with 14136862 transitions (capacity 14136870).
+Starting off-policy training for 100000000 updates
+Off-policy Training:   0%|                        | 0/100000000 [00:00<?, ?it/s]/home/naddeok5/envs/spcl/lib/python3.10/
+site-packages/torch/optim/lr_scheduler.py:136: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.ste
+p()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.st
+ep()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more detai
+ls at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+Hourly checkpoint saved at update 0
+Phase Training:  97%|███████████████▌| 34/35 [00:11<00:00,  2.85it/s, loss=0.58]
+Phase Training:  93%|█████████████▉ | 13/14 [00:04<00:00,  3.06it/s, loss=0.595]
+Phase Training:  83%|██████████████▏  | 5/6 [00:01<00:00,  2.82it/s, loss=0.686]
+Phase Training:  97%|██████████████▌| 33/34 [00:05<00:00,  6.29it/s, loss=0.336]
+Phase Training:  93%|██████████████▉ | 14/15 [00:02<00:00,  6.26it/s, loss=0.39]
+Phase Training:  86%|██████████████▌  | 6/7 [00:00<00:00,  6.17it/s, loss=0.454]
+Phase Training:  97%|███████████████▌| 35/36 [00:13<00:00,  2.56it/s, loss=0.58]
+Phase Training:  93%|█████████████▉ | 13/14 [00:04<00:00,  2.63it/s, loss=0.643]
+Phase Training:  83%|██████████████▏  | 5/6 [00:02<00:00,  2.43it/s, loss=0.598]
+Phase Training:  97%|██████████████▌| 33/34 [00:06<00:00,  5.39it/s, loss=0.226]
+Phase Training:  93%|██████████████ | 14/15 [00:03<00:00,  4.18it/s, loss=0.199]
+Phase Training:  86%|██████████████▌  | 6/7 [00:01<00:00,  4.53it/s, loss=0.159]
+Phase Training:  97%|██████████████▌| 34/35 [00:09<00:00,  3.55it/s, loss=0.307]
+Phase Training:  93%|██████████████ | 14/15 [00:03<00:00,  3.78it/s, loss=0.306]
+Phase Training:  83%|██████████████▏  | 5/6 [00:01<00:00,  3.05it/s, loss=0.418]
+Eval 0 Ep4:  67%|██████████████████████           | 2/3 [00:32<00:15, 15.72s/itCheckpoint at update 0/100000000 - Eval r
+eward 85.72 ± 1.41
+/home/naddeok5/SPCL/off_policy_train.py:160: UserWarning: Glyph 127881 (\N{PARTY POPPER}) missing from current font.
+  plt.savefig(fname); plt.close(fig)
+Saved detailed figure for eval_0 episode 0 to results/off_policy_v5/eval_0_episode_0_detailed.png
+Off-policy Training:   0%|     | 26758/100000000 [1:00:00<3093:33:39,  8.98it/s]Hourly checkpoint saved at update 26758
+Off-policy Training:   0%|     | 57014/100000000 [2:00:00<3288:03:36,  8.44it/s]Hourly checkpoint saved at update 57014
+Off-policy Training:   0%|     | 87227/100000000 [3:00:00<3666:19:51,  7.57it/s]Hourly checkpoint saved at update 87227
+Off-policy Training:   0%|    | 117194/100000000 [4:00:00<3367:40:58,  8.24it/s]Hourly checkpoint saved at update 117194
+Off-policy Training:   0%|    | 145744/100000000 [5:00:00<3388:27:37,  8.19it/s]Hourly checkpoint saved at update 145744
+Off-policy Training:   0%|    | 175056/100000000 [6:00:00<3332:47:57,  8.32it/s]Hourly checkpoint saved at update 175056
+Off-policy Training:   0%|    | 204976/100000000 [7:00:00<3626:36:36,  7.64it/s]Hourly checkpoint saved at update 204976
+Off-policy Training:   0%|    | 234809/100000000 [8:00:00<3285:50:55,  8.43it/s]Hourly checkpoint saved at update 234809
+Off-policy Training:   0%|    | 264799/100000000 [9:00:00<3259:44:27,  8.50it/s]Hourly checkpoint saved at update 264799
+Off-policy Training:   0%|   | 294799/100000000 [10:00:00<3517:47:51,  7.87it/s]Hourly checkpoint saved at update 294799
+Off-policy Training:   0%|   | 324113/100000000 [11:00:00<3306:04:54,  8.37it/s]Hourly checkpoint saved at update 324113
+Off-policy Training:   0%|   | 354091/100000000 [12:00:00<3414:28:16,  8.11it/s]Hourly checkpoint saved at update 354091
+Off-policy Training:   0%|   | 384043/100000000 [13:00:00<3276:26:52,  8.45it/s]Hourly checkpoint saved at update 384043
+Off-policy Training:   0%|   | 414138/100000000 [14:00:01<3283:35:53,  8.42it/s]Hourly checkpoint saved at update 414138
+Off-policy Training:   0%|   | 444063/100000000 [15:00:01<3240:44:05,  8.53it/s]Hourly checkpoint saved at update 444063
+Off-policy Training:   0%|   | 473755/100000000 [16:00:01<3280:56:45,  8.43it/s]Hourly checkpoint saved at update 473755
+Phase Training:  98%|██████████████▋| 58/59 [00:13<00:00,  4.15it/s, loss=0.566]
+Phase Training:  98%|██████████████▋| 58/59 [00:13<00:00,  4.22it/s, loss=0.272]
+Phase Training:  98%|██████████████▋| 58/59 [00:13<00:00,  4.25it/s, loss=0.277]
+Phase Training:  98%|██████████████▋| 58/59 [00:13<00:00,  4.24it/s, loss=0.287]
+Phase Training:  98%|██████████████▋| 58/59 [00:13<00:00,  4.25it/s, loss=0.306]
+Eval 500000 Ep4:   0%|                                    | 0/3 [00:00<?, ?it/sCheckpoint at update 500000/100000000 - E
+val reward 88.43 ± 1.11
+Saved detailed figure for eval_500000 episode 500000 to results/off_policy_v5/eval_500000_episode_500000_detailed.png
+Off-policy Training:   1%|   | 501654/100000000 [17:00:01<3398:15:09,  8.13it/s]Hourly checkpoint saved at update 501654
+Off-policy Training:   1%|   | 531111/100000000 [18:00:01<3213:02:18,  8.60it/s]Hourly checkpoint saved at update 531111
+Off-policy Training:   1%|   | 561173/100000000 [19:00:01<3305:20:06,  8.36it/s]Hourly checkpoint saved at update 561173
+Off-policy Training:   1%|   | 591369/100000000 [20:00:01<3278:31:34,  8.42it/s]Hourly checkpoint saved at update 591369
+Off-policy Training:   1%|   | 621923/100000000 [21:00:01<3227:35:44,  8.55it/s]Hourly checkpoint saved at update 621923
+Off-policy Training:   1%|   | 652498/100000000 [22:00:01<3282:11:19,  8.41it/s]Hourly checkpoint saved at update 652498
+Off-policy Training:   1%|   | 683011/100000000 [23:00:01<3290:49:08,  8.38it/s]Hourly checkpoint saved at update 683011
+Off-policy Training:   1%|   | 713668/100000000 [24:00:01<3175:51:56,  8.68it/s]Hourly checkpoint saved at update 713668
+Off-policy Training:   1%|   | 744554/100000000 [25:00:01<3211:42:09,  8.58it/s]Hourly checkpoint saved at update 744554
+Off-policy Training:   1%|   | 775323/100000000 [26:00:01<3180:52:26,  8.67it/s]Hourly checkpoint saved at update 775323
+Off-policy Training:   1%|   | 806094/100000000 [27:00:01<3104:34:12,  8.88it/s]Hourly checkpoint saved at update 806094
+Off-policy Training:   1%|   | 836789/100000000 [28:00:01<3239:30:33,  8.50it/s]Hourly checkpoint saved at update 836789
+Off-policy Training:   1%|   | 867583/100000000 [29:00:01<3282:10:24,  8.39it/s]Hourly checkpoint saved at update 867583
+Off-policy Training:   1%|   | 898254/100000000 [30:00:01<3170:08:05,  8.68it/s]Hourly checkpoint saved at update 898254
+Off-policy Training:   1%|   | 927591/100000000 [31:00:02<3279:32:54,  8.39it/s]Hourly checkpoint saved at update 927591
+Off-policy Training:   1%|   | 957770/100000000 [32:00:02<3249:34:19,  8.47it/s]Hourly checkpoint saved at update 957770
+Off-policy Training:   1%|   | 987537/100000000 [33:00:02<3404:08:21,  8.08it/s]Hourly checkpoint saved at update 987537
+Phase Training:  98%|██████████████▋| 58/59 [00:43<00:00,  1.34it/s, loss=0.722]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.40it/s, loss=0.885]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.40it/s, loss=0.719]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=0.532]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=0.975]
+Eval 1000000 Ep4:   0%|                                   | 0/3 [00:00<?, ?it/sCheckpoint at update 1000000/100000000 -
+Eval reward 84.85 ± 2.04
+Saved detailed figure for eval_1000000 episode 1000000 to results/off_policy_v5/eval_1000000_episode_1000000_detailed.pn
+g
+/home/naddeok5/SPCL/off_policy_train.py:472: UserWarning: Creating legend with loc="best" can be slow with large amounts
+ of data.
+  fig_lr.tight_layout(); fig_lr.savefig(os.path.join(results_dir, f"learning_rates_{update}.png")); plt.close(fig_lr)
+Off-policy Training:   1%|  | 1013455/100000000 [34:00:02<3214:58:40,  8.55it/s]Hourly checkpoint saved at update 101345
+5
+Off-policy Training:   1%|  | 1043274/100000000 [35:00:02<3246:12:16,  8.47it/s]Hourly checkpoint saved at update 104327
+4
+Off-policy Training:   1%|  | 1073586/100000000 [36:00:02<3297:22:06,  8.33it/s]Hourly checkpoint saved at update 107358
+6
+Off-policy Training:   1%|  | 1103792/100000000 [37:00:02<3595:57:06,  7.64it/s]Hourly checkpoint saved at update 110379
+2
+Off-policy Training:   1%|  | 1133092/100000000 [38:00:02<3318:57:42,  8.27it/s]Hourly checkpoint saved at update 113309
+2
+Off-policy Training:   1%|  | 1163247/100000000 [39:00:02<3247:44:46,  8.45it/s]Hourly checkpoint saved at update 116324
+7
+Off-policy Training:   1%|  | 1193542/100000000 [40:00:02<3221:07:12,  8.52it/s]Hourly checkpoint saved at update 119354
+2
+Off-policy Training:   1%|  | 1223108/100000000 [41:00:02<3386:35:44,  8.10it/s]Hourly checkpoint saved at update 122310
+8
+Off-policy Training:   1%|  | 1252868/100000000 [42:00:02<3274:26:12,  8.38it/s]Hourly checkpoint saved at update 125286
+8
+Off-policy Training:   1%|  | 1282197/100000000 [43:00:02<3417:48:59,  8.02it/s]Hourly checkpoint saved at update 128219
+7
+Off-policy Training:   1%|  | 1310914/100000000 [44:00:02<3242:11:05,  8.46it/s]Hourly checkpoint saved at update 131091
+4
+Off-policy Training:   1%|  | 1340988/100000000 [45:00:02<3485:58:52,  7.86it/s]Hourly checkpoint saved at update 134098
+8
+Off-policy Training:   1%|  | 1371164/100000000 [46:00:02<3296:12:12,  8.31it/s]Hourly checkpoint saved at update 137116
+4
+Off-policy Training:   1%|  | 1401496/100000000 [47:00:02<3203:50:49,  8.55it/s]Hourly checkpoint saved at update 140149
+6
+Off-policy Training:   1%|  | 1431404/100000000 [48:00:03<3341:15:17,  8.19it/s]Hourly checkpoint saved at update 143140
+4
+Off-policy Training:   1%|  | 1461278/100000000 [49:00:03<3256:36:25,  8.41it/s]Hourly checkpoint saved at update 146127
+8
+Off-policy Training:   1%|  | 1490425/100000000 [50:00:03<3490:41:20,  7.84it/s]Hourly checkpoint saved at update 149042
+5
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=0.417]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=0.416]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.40it/s, loss=0.907]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.40it/s, loss=0.828]
+Phase Training:  98%|███████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=1.04]
+Eval 1500000 Ep4:   0%|                                   | 0/3 [00:00<?, ?it/sCheckpoint at update 1500000/100000000 -
+Eval reward 85.47 ± 2.65
+Saved detailed figure for eval_1500000 episode 1500000 to results/off_policy_v5/eval_1500000_episode_1500000_detailed.pn
+g
+Off-policy Training:   2%|  | 1516284/100000000 [51:00:03<3334:09:02,  8.20it/s]Hourly checkpoint saved at update 151628
+4
+Off-policy Training:   2%|  | 1546066/100000000 [52:00:03<3301:16:21,  8.28it/s]Hourly checkpoint saved at update 154606
+6
+Off-policy Training:   2%|  | 1575051/100000000 [53:00:03<3221:51:28,  8.49it/s]Hourly checkpoint saved at update 157505
+1
+Off-policy Training:   2%|  | 1605150/100000000 [54:00:03<3187:35:04,  8.57it/s]Hourly checkpoint saved at update 160515
+0
+Off-policy Training:   2%|  | 1635283/100000000 [55:00:03<3192:15:29,  8.56it/s]Hourly checkpoint saved at update 163528
+3
+Off-policy Training:   2%|  | 1665379/100000000 [56:00:03<3170:33:30,  8.62it/s]Hourly checkpoint saved at update 166537
+9
+Off-policy Training:   2%|  | 1695614/100000000 [57:00:03<3146:18:12,  8.68it/s]Hourly checkpoint saved at update 169561
+4
+Off-policy Training:   2%|  | 1725990/100000000 [58:00:03<3176:47:34,  8.59it/s]Hourly checkpoint saved at update 172599
+0
+Off-policy Training:   2%|  | 1755873/100000000 [59:00:03<3348:17:55,  8.15it/s]Hourly checkpoint saved at update 175587
+3
+Off-policy Training:   2%|  | 1784591/100000000 [60:00:03<3198:19:17,  8.53it/s]Hourly checkpoint saved at update 178459
+1
+Off-policy Training:   2%|  | 1813653/100000000 [61:00:03<3310:08:20,  8.24it/s]Hourly checkpoint saved at update 181365
+3
+Off-policy Training:   2%|  | 1842750/100000000 [62:00:03<3195:55:33,  8.53it/s]Hourly checkpoint saved at update 184275
+0
+Off-policy Training:   2%|  | 1871235/100000000 [63:00:03<3390:10:05,  8.04it/s]Hourly checkpoint saved at update 187123
+5
+Off-policy Training:   2%|  | 1899898/100000000 [64:00:03<3371:58:11,  8.08it/s]Hourly checkpoint saved at update 189989
+8
+Off-policy Training:   2%|  | 1928918/100000000 [65:00:03<3277:58:55,  8.31it/s]Hourly checkpoint saved at update 192891
+8
+Off-policy Training:   2%|  | 1958192/100000000 [66:00:03<3420:24:10,  7.96it/s]Hourly checkpoint saved at update 195819
+2
+Off-policy Training:   2%|  | 1987300/100000000 [67:00:04<3470:32:17,  7.84it/s]Hourly checkpoint saved at update 198730
+0
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.38it/s, loss=0.823]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.40it/s, loss=0.585]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.39it/s, loss=0.536]
+Phase Training:  98%|██████████████▋| 58/59 [00:42<00:00,  1.36it/s, loss=0.507]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.38it/s, loss=0.451]
+Eval 2000000 Ep4:   0%|                                   | 0/3 [00:00<?, ?it/sCheckpoint at update 2000000/100000000 -
+Eval reward 86.79 ± 1.48
+Saved detailed figure for eval_2000000 episode 2000000 to results/off_policy_v5/eval_2000000_episode_2000000_detailed.pn
+g
+Off-policy Training:   2%|  | 2013805/100000000 [68:00:04<3255:27:17,  8.36it/s]Hourly checkpoint saved at update 201380
+5
+Off-policy Training:   2%|  | 2044087/100000000 [69:00:04<3187:51:48,  8.54it/s]Hourly checkpoint saved at update 204408
+7
+Off-policy Training:   2%|  | 2074017/100000000 [70:00:04<3173:23:10,  8.57it/s]Hourly checkpoint saved at update 207401
+7
+Off-policy Training:   2%|  | 2104279/100000000 [71:00:04<3157:06:28,  8.61it/s]Hourly checkpoint saved at update 210427
+9
+Off-policy Training:   2%|  | 2134869/100000000 [72:00:04<3340:30:49,  8.14it/s]Hourly checkpoint saved at update 213486
+9
+Off-policy Training:   2%|  | 2165881/100000000 [73:00:04<3199:12:14,  8.49it/s]Hourly checkpoint saved at update 216588
+1
+Off-policy Training:   2%|  | 2196767/100000000 [74:00:04<3114:33:02,  8.72it/s]Hourly checkpoint saved at update 219676
+7
+Off-policy Training:   2%|  | 2227538/100000000 [75:00:04<3159:39:13,  8.60it/s]Hourly checkpoint saved at update 222753
+8
+Off-policy Training:   2%|  | 2258276/100000000 [76:00:04<3216:25:37,  8.44it/s]Hourly checkpoint saved at update 225827
+6
+Off-policy Training:   2%|  | 2288966/100000000 [77:00:04<3170:28:16,  8.56it/s]Hourly checkpoint saved at update 228896
+6
+Off-policy Training:   2%|  | 2318844/100000000 [78:00:04<3219:50:36,  8.43it/s]Hourly checkpoint saved at update 231884
+4
+Off-policy Training:   2%|  | 2348575/100000000 [79:00:04<3162:53:04,  8.58it/s]Hourly checkpoint saved at update 234857
+5
+Off-policy Training:   2%|  | 2378679/100000000 [80:00:04<3250:17:30,  8.34it/s]Hourly checkpoint saved at update 237867
+9
+Off-policy Training:   2%|  | 2408942/100000000 [81:00:04<3243:48:03,  8.36it/s]Hourly checkpoint saved at update 240894
+2
+Off-policy Training:   2%|  | 2438137/100000000 [82:00:04<3256:04:02,  8.32it/s]Hourly checkpoint saved at update 243813
+7
+Off-policy Training:   2%|  | 2468274/100000000 [83:00:04<3184:00:33,  8.51it/s]Hourly checkpoint saved at update 246827
+4
+Off-policy Training:   2%|  | 2498397/100000000 [84:00:05<3155:55:03,  8.58it/s]Hourly checkpoint saved at update 249839
+7
+Phase Training:  98%|██████████████▋| 58/59 [00:42<00:00,  1.37it/s, loss=0.402]
+Phase Training:  98%|██████████████▋| 58/59 [00:42<00:00,  1.38it/s, loss=0.348]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.38it/s, loss=0.462]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.38it/s, loss=0.452]
+Phase Training:  98%|██████████████▋| 58/59 [00:41<00:00,  1.38it/s, loss=0.335]
+Eval 2500000 Ep4:   0%|                                   | 0/3 [00:00<?, ?it/sCheckpoint at update 2500000/100000000 -
+Eval reward 88.77 ± 1.33
+Saved detailed figure for eval_2500000 episode 2500000 to results/off_policy_v5/eval_2500000_episode_2500000_detailed.pn
+g
+Off-policy Training:   3%|  | 2524189/100000000 [85:00:05<3491:32:12,  7.75it/s]Hourly checkpoint saved at update 252418
+9
+Off-policy Training:   3%|  | 2553487/100000000 [86:00:05<3246:07:33,  8.34it/s]Hourly checkpoint saved at update 255348
+7
+Off-policy Training:   3%|  | 2582911/100000000 [87:00:05<3221:18:25,  8.40it/s]Hourly checkpoint saved at update 258291
+1
+Off-policy Training:   3%|  | 2613014/100000000 [88:00:05<3156:07:54,  8.57it/s]Hourly checkpoint saved at update 261301
+4
+Off-policy Training:   3%|  | 2643275/100000000 [89:00:05<3206:48:16,  8.43it/s]Hourly checkpoint saved at update 264327
+5
+Off-policy Training:   3%|  | 2673041/100000000 [90:00:05<3193:26:39,  8.47it/s]Hourly checkpoint saved at update 267304
+1
+Off-policy Training:   3%|  | 2702659/100000000 [91:00:05<3452:43:52,  7.83it/s]Hourly checkpoint saved at update 270265
+9
+Off-policy Training:   3%|  | 2732827/100000000 [92:00:05<3179:49:00,  8.50it/s]Hourly checkpoint saved at update 273282
+7
+Off-policy Training:   3%|  | 2762754/100000000 [93:00:05<3454:11:33,  7.82it/s]Hourly checkpoint saved at update 276275
+4
+Off-policy Training:   3%|  | 2792572/100000000 [94:00:05<3227:20:01,  8.37it/s]Hourly checkpoint saved at update 279257
+2
+Off-policy Training:   3%|  | 2822747/100000000 [95:00:05<3147:20:16,  8.58it/s]Hourly checkpoint saved at update 282274
+7
+Off-policy Training:   3%|  | 2853098/100000000 [96:00:05<3194:26:51,  8.45it/s]Hourly checkpoint saved at update 285309
+8
+Off-policy Training:   3%|  | 2883651/100000000 [97:00:05<3099:02:00,  8.70it/s]Hourly checkpoint saved at update 288365
+1
+Off-policy Training:   3%|  | 2913273/100000000 [98:00:05<3174:51:24,  8.49it/s]Hourly checkpoint saved at update 291327
+3
+Off-policy Training:   3%|  | 2925043/100000000 [98:23:29<3226:15:33,  8.36it/s]Off-policy Training:   3%|  | 2925043/10
+0000000 [98:23:29<3265:22:30,  8.26it/s]
+Traceback (most recent call last):
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 548, in <module>
+    ax_critic.plot(critic1_losses, color='red', label="Critic 1")
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 347, in main
+    action_var_history, update_steps = [], []
+  File "/home/naddeok5/SPCL/rl_agent.py", line 290, in update
+    def update(self, replay_buffer, batch_size):
+  File "/home/naddeok5/SPCL/replay_buffer.py", line 128, in sample
+    idxs = torch.multinomial(probs, batch_size, replacement=True) if N > 0 else torch.empty(0, dtype=torch.long)
+KeyboardInterrupt
+wandb: Waiting for W&B process to finish... (failed 255). Press Control-C to abort syncing.
+^C^CException ignored in atexit callback: <function _Manager._atexit_setup.<locals>.<lambda> at 0x7fb44a0a4f70>
+Traceback (most recent call last):
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/wandb_manager.py", line 155, in <lambda>
+    self._atexit_lambda = lambda: self._atexit_teardown()
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/wandb_manager.py", line 164, in _atexit_teardown
+    self._teardown(exit_code)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/wandb_manager.py", line 175, in _teardown
+    result = self._service.join()
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/service/service.py", line 271, in join
+    ret = self._internal_proc.wait()
+  File "/usr/lib/python3.10/subprocess.py", line 1222, in wait
+    self._wait(timeout=sigint_timeout)
+  File "/usr/lib/python3.10/subprocess.py", line 1953, in _wait
+    time.sleep(delay)
+KeyboardInterrupt:
+^CException ignored in: <function WeakSet.__init__.<locals>._remove at 0x7fb45105b640>
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/_weakrefset.py", line 39, in _remove
+    def _remove(item, selfref=ref(self)):
+KeyboardInterrupt:
+^C^C^C
+
+wandb:
+wandb: Run history:
+wandb:       actor_loss █▆▆▅▇▇▆▆▆▇▆▅▅▅▅▃▃▃▂▁▂▂▃▂▁▁▃▂▃▃▂▃▃▃▂▂▂▃▂▂
+wandb:         actor_lr █▅▂▁▆█▇▃▁▄▇█▄▁▂▅█▆▂▁▅█▇▄▁▃▆█▅▂▁▄█▇▃▁▄▇█▄
+wandb:     critic1_loss █▄▃▄▄▄▆▆▅▅▅▁▄▄▃▆▅▃▂▂▃▄▂▃▃▃▃▅▁▂▃▃▃▃▂▁▃▃▂▂
+wandb:       critic1_lr █▅▂▁▆█▇▃▁▄▇█▄▁▂▅█▆▂▁▅█▇▄▁▃▆█▅▂▁▄█▇▃▁▄▇█▄
+wandb:     critic2_loss █▅▃▄▅▄▅▆▅▆▅▁▄▄▃▆▅▄▂▃▃▄▂▃▃▃▃▅▂▂▃▃▃▃▂▁▃▃▁▂
+wandb:       critic2_lr █▅▂▁▆█▇▃▁▄▇█▄▁▂▅█▆▂▁▅█▇▄▁▃▆█▅▂▁▄█▇▃▁▄▇█▄
+wandb: eval_mean_reward ▃▇▁▂▄█
+wandb:  eval_std_reward ▂▁▅█▃▂
+wandb:           ood_l2 ▆▆▇█▇▇▃▁▂▁▁▃▃▃▃▄▅▇██▇█▇▇▇▇▇▆▆▇▆▆▆▅▅▆▅▅▆▅
+wandb:           update ▁▁▁▁▂▂▂▂▂▃▃▃▃▃▃▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▆▇▇▇▇▇███
+wandb:
+wandb: Run summary:
+wandb:       actor_loss -92.11443
+wandb:         actor_lr 0.0001
+wandb:     critic1_loss 23.98139
+wandb:       critic1_lr 0.00032
+wandb:     critic2_loss 24.0609
+wandb:       critic2_lr 0.00032
+wandb: eval_mean_reward 88.77344
+wandb:  eval_std_reward 1.33082
+wandb:           ood_l2 0.8298
+wandb:           update 2925042
+wandb:
+wandb: 🚀 View run legendary-jazz-10 at: https://wandb.ai/naddeok/off_policy_training/runs/hsn0rwle
+wandb: ️⚡ View job at https://wandb.ai/naddeok/off_policy_training/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjY5NTE0NjMzNA==/version
+_details/v8
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20251010_105431-hsn0rwle/logs
+
+
+(spcl) naddeok5@lambda01:~/SPCL$
+(spcl) naddeok5@lambda01:~/SPCL$
+(spcl) naddeok5@lambda01:~/SPCL$
+(spcl) naddeok5@lambda01:~/SPCL$ git pull
+Already up to date.
+(spcl) naddeok5@lambda01:~/SPCL$ python3 off_policy_train.py -c config_off_policy_seq.yaml
+wandb: Currently logged in as: naddeok. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.22.2 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.15.12
+wandb: Run data is saved locally in /home/naddeok5/SPCL/wandb/run-20251014_141853-i9rcywub
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run pious-aardvark-13
+wandb: ⭐️ View project at https://wandb.ai/naddeok/off_policy_training
+wandb: 🚀 View run at https://wandb.ai/naddeok/off_policy_training/runs/i9rcywub
+Loaded dataset from /data/naddeok/spcl/merged_history.pt with 14136862 transitions
+Behavior cloning warm-start complete.
+Replay buffer initialized with 14136862 transitions (capacity 14136870).
+Starting off-policy training for 100000000 updates
+Off-policy Training:   0%|                        | 0/100000000 [00:00<?, ?it/s]/home/naddeok5/envs/spcl/lib/python3.10/
+site-packages/torch/optim/lr_scheduler.py:136: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.ste
+p()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.st
+ep()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more detai
+ls at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+Hourly checkpoint saved at update 0
+Phase Training:  97%|██████████████▌| 36/37 [00:15<00:00,  2.40it/s, loss=0.606]
+Phase Training:  93%|█████████████▉ | 13/14 [00:08<00:00,  1.53it/s, loss=0.448]
+Phase Training:  83%|██████████████▏  | 5/6 [00:03<00:00,  1.62it/s, loss=0.689]
+Phase Training:  97%|██████████████▌| 34/35 [00:07<00:00,  4.39it/s, loss=0.272]
+Phase Training:  93%|██████████████▊ | 13/14 [00:02<00:00,  6.19it/s, loss=0.29]
+Phase Training:  83%|███████████████   | 5/6 [00:01<00:00,  3.31it/s, loss=0.27]
+Phase Training:  97%|██████████████▌| 36/37 [00:21<00:00,  1.64it/s, loss=0.515]
+Phase Training:  93%|█████████████▉ | 13/14 [00:05<00:00,  2.24it/s, loss=0.469]
+Phase Training:  83%|███████████████   | 5/6 [00:02<00:00,  1.71it/s, loss=0.53]
+Phase Training:  97%|██████████████▌| 34/35 [00:09<00:00,  3.57it/s, loss=0.246]
+Phase Training:  93%|█████████████ | 14/15 [00:05<00:00,  2.49it/s, loss=0.0376]
+Phase Training:  83%|██████████████▏  | 5/6 [00:02<00:00,  2.42it/s, loss=0.302]
+Phase Training:  97%|██████████████▌| 36/37 [00:14<00:00,  2.55it/s, loss=0.356]
+Phase Training:  93%|██████████████▊ | 13/14 [00:07<00:00,  1.67it/s, loss=0.37]
+Phase Training:  83%|██████████████▏  | 5/6 [00:02<00:00,  1.94it/s, loss=0.223]
+Eval 0 Ep4:  67%|██████████████████████           | 2/3 [00:48<00:23, 23.55s/itCheckpoint at update 0/100000000 - Eval r
+eward 85.30 ± 1.29
+/home/naddeok5/SPCL/off_policy_train.py:160: UserWarning: Glyph 127881 (\N{PARTY POPPER}) missing from current font.
+  plt.savefig(fname); plt.close(fig)
+Saved detailed figure for eval_0 episode 0 to results/off_policy_v6/eval_0_episode_0_detailed.png
+Off-policy Training:   0%|       | 3/100000000 [07:30<4172303:32:09, 150.20s/it]
+Traceback (most recent call last):
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 568, in <module>
+    main()
+  File "/home/naddeok5/SPCL/off_policy_train.py", line 359, in main
+    metrics = agent.update(replay_buffer, int(config["rl"]["batch_size"]))
+  File "/home/naddeok5/SPCL/rl_agent.py", line 451, in update
+    actor_loss.backward()
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/torch/_tensor.py", line 492, in backward
+    torch.autograd.backward(
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/torch/autograd/__init__.py", line 251, in backward
+    Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+RuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation: [torch.cud
+a.FloatTensor [512, 1]], which is output 0 of AsStridedBackward0, is at version 3; expected version 2 instead. Hint: ena
+ble anomaly detection to find the operation that failed to compute its gradient, with torch.autograd.set_detect_anomaly(
+True).
+wandb: Waiting for W&B process to finish... (failed 1). Press Control-C to abort syncing.
+wandb: - 0.008 MB of 0.008 MB uploaded (0.000 MB deduped)
+wandb: Run history:
+wandb:       actor_loss ▁▁▁
+wandb:         actor_lr ▁▁▁
+wandb:     critic1_loss █▁▅
+wandb:       critic1_lr ▁▁▁
+wandb:     critic2_loss █▁▆
+wandb:       critic2_lr ▁▁▁
+wandb: eval_mean_reward ▁
+wandb:  eval_std_reward ▁
+wandb:      mix_entropy ▁
+wandb:          mix_max ▁
+wandb:          mix_min ▁
+wandb:           ood_l2 ▇▁█
+wandb:           update ▁▁▅█
+wandb:       usage_mean ▁
+wandb:
+wandb: Run summary:
+wandb:       actor_loss 0.0
+wandb:         actor_lr 0.0003
+wandb:     critic1_loss 2355.47412
+wandb:       critic1_lr 0.001
+wandb:     critic2_loss 2360.34058
+wandb:       critic2_lr 0.001
+wandb: eval_mean_reward 85.30378
+wandb:  eval_std_reward 1.28687
+wandb:      mix_entropy 1.09806
+wandb:          mix_max 0.3726
+wandb:          mix_min 0.30429
+wandb:           ood_l2 0.50065
+wandb:           update 2
+wandb:       usage_mean 0.56454
+wandb:
+wandb: 🚀 View run pious-aardvark-13 at: https://wandb.ai/naddeok/off_policy_training/runs/i9rcywub
+wandb: ️⚡ View job at https://wandb.ai/naddeok/off_policy_training/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjY5NTE0NjMzNA==/version
+_details/v9
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20251014_141853-i9rcywub/logs
+Exception in thread ChkStopThr:
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.10/threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/wandb_run.py", line 285, in check_stop_status
+    self._loop_check_status(
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/wandb_run.py", line 223, in _loop_check_status
+    local_handle = request()
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/interface/interface.py", line 727, in deliver_st
+op_status
+    return self._deliver_stop_status(status)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/interface/interface_shared.py", line 459, in _de
+liver_stop_status
+    return self._deliver_record(record)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/interface/interface_shared.py", line 428, in _de
+liver_record
+    handle = mailbox._deliver_record(record, interface=self)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/lib/mailbox.py", line 455, in _deliver_record
+    interface._publish(record)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/interface/interface_sock.py", line 51, in _publi
+sh
+    self._sock_client.send_record_publish(record)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/lib/sock_client.py", line 221, in send_record_pu
+blish
+    self.send_server_request(server_req)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/lib/sock_client.py", line 155, in send_server_re
+quest
+    self._send_message(msg)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/lib/sock_client.py", line 152, in _send_message
+    self._sendall_with_error_handle(header + data)
+  File "/home/naddeok5/envs/spcl/lib/python3.10/site-packages/wandb/sdk/lib/sock_client.py", line 130, in _sendall_with_
+error_handle
+    sent = self._sock.send(data)
+BrokenPipeError: [Errno 32] Broken pipe
+(spcl) naddeok5@lambda01:~/SPCL$
