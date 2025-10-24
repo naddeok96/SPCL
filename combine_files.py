@@ -44,26 +44,26 @@ def combine_files(file_paths, output_file):
 if __name__ == "__main__":
     # Set the list of file paths (update as needed).
     file_paths = [
-        "config_off_policy_seq_dp.yaml",
-        "off_policy_train_dp.py"
-        # "utils.py",
-        # "replay_buffer.py",
-        # "rl_agent.py",
-        # "curriculum.py",
-        # "curriculum_env.py",
+        # "config_off_policy_seq_dp.yaml",
+        # "off_policy_train_dp.py"
+        "utils.py",
+        "replay_buffer.py",
+        "rl_agent.py",
+        "curriculum.py",
+        "curriculum_env.py",
         # # "generate_dataset.py",
-        # "off_policy_train.py",
-        # "config_off_policy_seq.yaml",
+        "off_policy_train.py",
+        "config_off_policy_seq.yaml",
         # # "on_policy_train.py",
         # # "config.yaml",
 
-        # "analyze_history.py",
-        # "eval_population.py",
-        # "init_population.py",
-        # "evolve_population.py",
+        "analyze_history.py",
+        "eval_population.py",
+        "init_population.py",
+        "evolve_population.py",
         # # "merge_history.py",
-        # "population_utils.py",
-        # "run_evolution.sh"
+        "population_utils.py",
+        "run_evolution.sh"
         # # "run_evolution_parallel.sh",
         # # "experiment_for_vec_speed.py"
 
