@@ -66,6 +66,8 @@ if __name__ == "__main__":
         # "run_evolution.sh"
         # # "run_evolution_parallel.sh",
         # # "experiment_for_vec_speed.py"
+
+        "session_output_2.txt"
     ]
     # Set the output file path.
     output_file = "all_in_one.py"

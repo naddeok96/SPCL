@@ -207,7 +207,26 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
 
     if wandb is not None:
-        wandb.init(project="off_policy_training", config=config)
+        wandb_kwargs = {"project": "off_policy_training", "config": config}
+        run_name = config.get("run_name")
+        if run_name:
+            wandb_kwargs["name"] = run_name
+
+        tags = []
+        existing_tags = config.get("run_tags")
+        if isinstance(existing_tags, (list, tuple)):
+            tags.extend(str(t) for t in existing_tags)
+        elif isinstance(existing_tags, str):
+            tags.append(existing_tags)
+
+        run_tag = config.get("run_tag")
+        if run_tag:
+            tags.append(str(run_tag))
+
+        if tags:
+            wandb_kwargs["tags"] = tags
+
+        wandb.init(**wandb_kwargs)
     else:
         print("wandb not installed; proceeding without online logging")
 
@@ -380,7 +399,8 @@ def main():
 
     # Training schedule
     num_updates = int(config["rl"].get("off_policy_updates", 1_000_000))
-    evaluation_interval  = max(1, num_updates // 200)   
+    default_eval_interval = max(1, num_updates // 200)
+    evaluation_interval  = max(1, int(config["rl"].get("eval_every_updates", default_eval_interval)))
     checkpoint_interval  = max(1, num_updates // 200)   # save every 5%
 
     print(f"Starting off-policy training for {num_updates} updates")

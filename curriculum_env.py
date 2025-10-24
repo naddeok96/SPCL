@@ -58,6 +58,10 @@ class CurriculumEnv:
         self.config = config
         self.device = torch.device(config["device"])
         self.batch_size = config["curriculum"]["student_batch_size"]
+        dl_cfg = config["curriculum"]
+        self.loader_workers = int(dl_cfg.get("dataloader_workers", 4))
+        self.loader_pin_memory = bool(dl_cfg.get("dataloader_pin_memory", True))
+        self.loader_persistent = bool(dl_cfg.get("dataloader_persistent_workers", self.loader_workers > 0))
         self.num_bins = config["observation"]["num_bins"]
 
         # Fraction bounds
@@ -171,7 +175,14 @@ class CurriculumEnv:
         self.hard_subset.indices = h_idx
 
         # Build DataLoaders now that subsets are non-empty
-        dl_args = dict(batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True, persistent_workers=True)
+        persistent_workers = self.loader_persistent and self.loader_workers > 0
+        dl_args = dict(
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.loader_workers,
+            pin_memory=self.loader_pin_memory,
+            persistent_workers=persistent_workers,
+        )
         self.easy_loader = DataLoader(self.easy_subset, **dl_args)
         self.medium_loader = DataLoader(self.medium_subset, **dl_args)
         self.hard_loader = DataLoader(self.hard_subset, **dl_args)

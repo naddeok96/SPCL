@@ -21,6 +21,7 @@ curriculum:
   learning_rate_range: [0.001, 0.01]
   max_phases: 3
   student_batch_size: 512
+  dataloader_workers: 8
 
 rl:
   ea_pop_size:      124
@@ -31,6 +32,7 @@ rl:
   pretrain_bc_iters:       100000
   pretrain_critic_iters:   100000
   off_policy_updates:      100000000
+  eval_every_updates:      50000
 
   policy_delay: 4
   policy_noise: 0.2
@@ -111,17 +113,18 @@ paths:
   on_policy_critic1_model:  "results/seq_on_policy/seq_on_policy_critic1_model_final.pth"
   on_policy_critic2_model:  "results/seq_on_policy/seq_on_policy_critic2_model_final.pth"
   on_policy_parallel_dir: "results/on_policy_parallel"
-  replay_cache_path: null   # set to a filepath (e.g. "./cache/replay_buffer.pt") to enable replay caching
+  replay_cache_path: "./cache/replay_buffer_dp.pt"
 
 compare_models:
   Off Policy Start:
-    actor:   "results/off_policy/off_policy_actor_0.pth"
-    critic1: "results/off_policy/off_policy_critic1_0.pth"
-    critic2: "results/off_policy/off_policy_critic2_0.pth"
+    actor:   "results/off_policy_dp/off_policy_actor_0.pth"
+    critic1: "results/off_policy_dp/off_policy_critic1_0.pth"
+    critic2: "results/off_policy_dp/off_policy_critic2_0.pth"
   Off Policy End:
-    actor:   "results/off_policy/off_policy_actor_model_final.pth"
-    critic1: "results/off_policy/off_policy_critic1_model_final.pth"
-    critic2: "results/off_policy/off_policy_critic2_model_final.pth"
+    actor:   "results/off_policy_dp/off_policy_actor_model_final.pth"
+    critic1: "results/off_policy_dp/off_policy_critic1_model_final.pth"
+    critic2: "results/off_policy_dp/off_policy_critic2_model_final.pth"
+
+run_tag: "dp"
 
 seed: 42
-

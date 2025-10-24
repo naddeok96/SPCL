@@ -156,13 +156,16 @@ class DDPGAgent:
             t.data.copy_(t.data * (1 - self.tau) + s.data * self.tau)
 
     def _project_action(self, a):
+        """
+        Purely functional projection (no in-place writes) so autograd stays happy.
+        Works both with and without gradients.
+        """
         lr_min, lr_max = self.config["curriculum"]["learning_rate_range"]
-        a[:, 0:1] = a[:, 0:1].clamp(lr_min, lr_max)
-        mix = a[:, 1:4].clamp(min=0.0)
-        mix = _project_mixture(mix, eps=self.mix_floor)
-        a[:, 1:4] = mix
-        a[:, 4:5] = a[:, 4:5].clamp(0.0, 1.0)
-        return a
+        lr   = a[..., 0:1].clamp(lr_min, lr_max)
+        mix0 = a[..., 1:4].clamp(min=0.0)
+        mix  = _project_mixture(mix0, eps=self.mix_floor)
+        use  = a[..., 4:5].clamp(0.0, 1.0)
+        return torch.cat([lr, mix, use], dim=-1)
 
     def select_action(self, state, noise_enable=True):
         if torch.is_tensor(state):
@@ -277,7 +280,6 @@ class DDPGAgent:
         self.critic2_optimizer.zero_grad(); loss2.backward()
         utils.clip_grad_norm_(self.critic2.parameters(), 1.0)
         self.critic2_optimizer.step(); self.critic2_scheduler.step()
-        self.actor_scheduler.step()
 
         if idxs is not None:
             eps = float(self.config["rl"].get("per_epsilon", 1e-6))
@@ -454,12 +456,12 @@ class DDPGAgent:
             self._soft_update(self.actor_target, self.actor)
             self._soft_update(self.critic1_target, self.critic1)
             self._soft_update(self.critic2_target, self.critic2)
+            # Step actor scheduler only when we actually stepped the actor optimizer
+            self.actor_scheduler.step()
         else:
             with torch.no_grad():
                 a_curr = self.actor(s)
                 a_curr = self._project_action(a_curr)
-
-        self.actor_scheduler.step()
 
         # PER priority update
         if idxs is not None:
